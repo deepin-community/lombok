@@ -1,0 +1,61 @@
+From: Markus Koschany <apo@debian.org>
+Date: Thu, 8 Nov 2018 14:12:11 +0100
+Subject: java11-log-error
+
+Some methods were removed in Java 11.
+
+Bug-Debian: https://bugs.debian.org/910748
+---
+ src/core/lombok/javac/JavacAST.java | 32 --------------------------------
+ 1 file changed, 32 deletions(-)
+
+diff --git a/src/core/lombok/javac/JavacAST.java b/src/core/lombok/javac/JavacAST.java
+index acf4b4d..b7f0027 100644
+--- a/src/core/lombok/javac/JavacAST.java
++++ b/src/core/lombok/javac/JavacAST.java
+@@ -511,7 +511,6 @@ public class JavacAST extends AST<JavacAST, JavacNode, JCTree> {
+ 					break;
+ 				}
+ 			}
+-			if (hasMultipleErrors) return new JdkBefore9(log, messager, errorCount);
+ 
+ 			Field warningCount = null;
+ 			try {
+@@ -524,37 +523,6 @@ public class JavacAST extends AST<JavacAST, JavacNode, JCTree> {
+ 		}
+ 	}
+ 	
+-	static class JdkBefore9 extends ErrorLog {
+-		private JdkBefore9(Log log, Messager messager, Field errorCount) {
+-			super(log, messager, errorCount, null);
+-		}
+-
+-		@Override void error1(DiagnosticPosition pos, String message) {
+-			try {
+-			Field multipleErrorsField = log.getClass().getField("multipleErrors");
+-			boolean prev = multipleErrorsField.getBoolean(log);
+-			multipleErrorsField.setBoolean(log, true);
+-			try {
+-				log.error(pos, "proc.messager", message);
+-			} finally {
+-				multipleErrorsField.setBoolean(log, prev);
+-			}
+-			} catch (Throwable t) {}
+-		}
+-
+-		@Override void warning1(DiagnosticPosition pos, String message) {
+-			log.warning(pos, "proc.messager", message);
+-		}
+-
+-		@Override void mandatoryWarning1(DiagnosticPosition pos, String message) {
+-			log.mandatoryWarning(pos, "proc.messager", message);
+-		}
+-
+-		@Override void note(DiagnosticPosition pos, String message) {
+-			log.note(pos, "proc.messager", message);
+-		}
+-	}
+-	
+ 	static class Jdk9Plus extends ErrorLog {
+ 		private static final String PROC_MESSAGER = "proc.messager";
+ 		private Object multiple;
