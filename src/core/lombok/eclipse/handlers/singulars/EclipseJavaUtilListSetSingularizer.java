@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2017 The Project Lombok Authors.
+ * Copyright (C) 2015-2021 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,9 +28,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import lombok.AccessLevel;
+import lombok.core.configuration.CheckerFrameworkVersion;
 import lombok.core.handlers.HandlerUtil;
 import lombok.eclipse.EclipseNode;
+import lombok.eclipse.handlers.HandleNonNull;
 import lombok.eclipse.handlers.EclipseSingularsRecipes.SingularData;
+import lombok.eclipse.handlers.EclipseSingularsRecipes.StatementMaker;
+import lombok.eclipse.handlers.EclipseSingularsRecipes.TypeReferenceMaker;
 
 import org.eclipse.jdt.internal.compiler.ast.Annotation;
 import org.eclipse.jdt.internal.compiler.ast.Argument;
@@ -45,14 +50,12 @@ import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.NullLiteral;
 import org.eclipse.jdt.internal.compiler.ast.OperatorIds;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
-import org.eclipse.jdt.internal.compiler.ast.ReturnStatement;
 import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
 import org.eclipse.jdt.internal.compiler.ast.Statement;
 import org.eclipse.jdt.internal.compiler.ast.ThisReference;
 import org.eclipse.jdt.internal.compiler.ast.TypeReference;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.lookup.TypeConstants;
-import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 
 abstract class EclipseJavaUtilListSetSingularizer extends EclipseJavaUtilSingularizer {
 	@Override public List<char[]> listFieldsToBeGenerated(SingularData data, EclipseNode builderType) {
@@ -84,53 +87,50 @@ abstract class EclipseJavaUtilListSetSingularizer extends EclipseJavaUtilSingula
 		buildField.modifiers = ClassFileConstants.AccPrivate;
 		buildField.declarationSourceEnd = -1;
 		buildField.type = type;
+		
 		data.setGeneratedByRecursive(buildField);
 		return Collections.singletonList(injectFieldAndMarkGenerated(builderType, buildField));
 	}
 	
-	@Override public void generateMethods(SingularData data, boolean deprecate, EclipseNode builderType, boolean fluent, boolean chain) {
+	@Override public void generateMethods(CheckerFrameworkVersion cfv, SingularData data, boolean deprecate, EclipseNode builderType, boolean fluent, TypeReferenceMaker returnTypeMaker, StatementMaker returnStatementMaker, AccessLevel access) {
 		if (useGuavaInstead(builderType)) {
-			guavaListSetSingularizer.generateMethods(data, deprecate, builderType, fluent, chain);
+			guavaListSetSingularizer.generateMethods(cfv, data, deprecate, builderType, fluent, returnTypeMaker, returnStatementMaker, access);
 			return;
 		}
 		
-		TypeReference returnType = chain ? cloneSelfType(builderType) : TypeReference.baseTypeReference(TypeIds.T_void, 0);
-		Statement returnStatement = chain ? new ReturnStatement(new ThisReference(0, 0), 0, 0) : null;
-		generateSingularMethod(deprecate, returnType, returnStatement, data, builderType, fluent);
-		
-		returnType = chain ? cloneSelfType(builderType) : TypeReference.baseTypeReference(TypeIds.T_void, 0);
-		returnStatement = chain ? new ReturnStatement(new ThisReference(0, 0), 0, 0) : null;
-		generatePluralMethod(deprecate, returnType, returnStatement, data, builderType, fluent);
-		
-		returnType = chain ? cloneSelfType(builderType) : TypeReference.baseTypeReference(TypeIds.T_void, 0);
-		returnStatement = chain ? new ReturnStatement(new ThisReference(0, 0), 0, 0) : null;
-		generateClearMethod(deprecate, returnType, returnStatement, data, builderType);
+		generateSingularMethod(cfv, deprecate, returnTypeMaker.make(), returnStatementMaker.make(), data, builderType, fluent, access);
+		generatePluralMethod(cfv, deprecate, returnTypeMaker.make(), returnStatementMaker.make(), data, builderType, fluent, access);
+		generateClearMethod(cfv, deprecate, returnTypeMaker.make(), returnStatementMaker.make(), data, builderType, access);
 	}
 	
-	private void generateClearMethod(boolean deprecate, TypeReference returnType, Statement returnStatement, SingularData data, EclipseNode builderType) {
+	private void generateClearMethod(CheckerFrameworkVersion cfv, boolean deprecate, TypeReference returnType, Statement returnStatement, SingularData data, EclipseNode builderType, AccessLevel access) {
 		MethodDeclaration md = new MethodDeclaration(((CompilationUnitDeclaration) builderType.top().get()).compilationResult);
 		md.bits |= ECLIPSE_DO_NOT_TOUCH_FLAG;
-		md.modifiers = ClassFileConstants.AccPublic;
+		md.modifiers = toEclipseModifier(access);
 		
 		FieldReference thisDotField = new FieldReference(data.getPluralName(), 0L);
 		thisDotField.receiver = new ThisReference(0, 0);
 		FieldReference thisDotField2 = new FieldReference(data.getPluralName(), 0L);
 		thisDotField2.receiver = new ThisReference(0, 0);
-		md.selector = HandlerUtil.buildAccessorName("clear", new String(data.getPluralName())).toCharArray();
+		md.selector = HandlerUtil.buildAccessorName(builderType, "clear", new String(data.getPluralName())).toCharArray();
 		MessageSend clearMsg = new MessageSend();
 		clearMsg.receiver = thisDotField2;
 		clearMsg.selector = "clear".toCharArray();
 		Statement clearStatement = new IfStatement(new EqualExpression(thisDotField, new NullLiteral(0, 0), OperatorIds.NOT_EQUAL), clearMsg, 0, 0);
 		md.statements = returnStatement != null ? new Statement[] {clearStatement, returnStatement} : new Statement[] {clearStatement};
 		md.returnType = returnType;
-		md.annotations = deprecate ? new Annotation[] { generateDeprecatedAnnotation(data.getSource()) } : null;
+		addCheckerFrameworkReturnsReceiver(md.returnType, data.getSource(), cfv);
+		md.annotations = generateSelfReturnAnnotations(deprecate, data.getSource());
+		
+		data.setGeneratedByRecursive(md);
+		if (returnStatement != null) createRelevantNonNullAnnotation(builderType, md);
 		injectMethod(builderType, md);
 	}
 	
-	void generateSingularMethod(boolean deprecate, TypeReference returnType, Statement returnStatement, SingularData data, EclipseNode builderType, boolean fluent) {
+	void generateSingularMethod(CheckerFrameworkVersion cfv, boolean deprecate, TypeReference returnType, Statement returnStatement, SingularData data, EclipseNode builderType, boolean fluent, AccessLevel access) {
 		MethodDeclaration md = new MethodDeclaration(((CompilationUnitDeclaration) builderType.top().get()).compilationResult);
 		md.bits |= ECLIPSE_DO_NOT_TOUCH_FLAG;
-		md.modifiers = ClassFileConstants.AccPublic;
+		md.modifiers = toEclipseModifier(access);
 		
 		List<Statement> statements = new ArrayList<Statement>();
 		statements.add(createConstructBuilderVarIfNeeded(data, builderType, false));
@@ -144,22 +144,30 @@ abstract class EclipseJavaUtilListSetSingularizer extends EclipseJavaUtilSingula
 		statements.add(thisDotFieldDotAdd);
 		if (returnStatement != null) statements.add(returnStatement);
 		
-		md.statements = statements.toArray(new Statement[statements.size()]);
+		md.statements = statements.toArray(new Statement[0]);
 		TypeReference paramType = cloneParamType(0, data.getTypeArgs(), builderType);
-		Argument param = new Argument(data.getSingularName(), 0, paramType, 0);
+		Annotation[] typeUseAnns = getTypeUseAnnotations(paramType);
+		removeTypeUseAnnotations(paramType);
+		Argument param = new Argument(data.getSingularName(), 0, paramType, ClassFileConstants.AccFinal);
+		param.annotations = typeUseAnns;
 		md.arguments = new Argument[] {param};
 		md.returnType = returnType;
-		md.selector = fluent ? data.getSingularName() : HandlerUtil.buildAccessorName("add", new String(data.getSingularName())).toCharArray();
-		md.annotations = deprecate ? new Annotation[] { generateDeprecatedAnnotation(data.getSource()) } : null;
+		addCheckerFrameworkReturnsReceiver(md.returnType, data.getSource(), cfv);
+		char[] prefixedSingularName = data.getSetterPrefix().length == 0 ? data.getSingularName() : HandlerUtil.buildAccessorName(builderType, new String(data.getSetterPrefix()), new String(data.getSingularName())).toCharArray();
+		md.selector = fluent ? prefixedSingularName : HandlerUtil.buildAccessorName(builderType, "add", new String(data.getSingularName())).toCharArray();
+		Annotation[] selfReturnAnnotations = generateSelfReturnAnnotations(deprecate, data.getSource());
+		Annotation[] copyToSetterAnnotations = copyAnnotations(md, findCopyableToBuilderSingularSetterAnnotations(data.getAnnotation().up()));
+		md.annotations = concat(selfReturnAnnotations, copyToSetterAnnotations, Annotation.class);
 		
+		if (returnStatement != null) createRelevantNonNullAnnotation(builderType, md);
 		data.setGeneratedByRecursive(md);
-		injectMethod(builderType, md);
+		HandleNonNull.INSTANCE.fix(injectMethod(builderType, md));
 	}
 	
-	void generatePluralMethod(boolean deprecate, TypeReference returnType, Statement returnStatement, SingularData data, EclipseNode builderType, boolean fluent) {
+	void generatePluralMethod(CheckerFrameworkVersion cfv, boolean deprecate, TypeReference returnType, Statement returnStatement, SingularData data, EclipseNode builderType, boolean fluent, AccessLevel access) {
 		MethodDeclaration md = new MethodDeclaration(((CompilationUnitDeclaration) builderType.top().get()).compilationResult);
 		md.bits |= ECLIPSE_DO_NOT_TOUCH_FLAG;
-		md.modifiers = ClassFileConstants.AccPublic;
+		md.modifiers = toEclipseModifier(access);
 		
 		List<Statement> statements = new ArrayList<Statement>();
 		statements.add(createConstructBuilderVarIfNeeded(data, builderType, false));
@@ -171,19 +179,31 @@ abstract class EclipseJavaUtilListSetSingularizer extends EclipseJavaUtilSingula
 		thisDotFieldDotAddAll.receiver = thisDotField;
 		thisDotFieldDotAddAll.selector = "addAll".toCharArray();
 		statements.add(thisDotFieldDotAddAll);
-		if (returnStatement != null) statements.add(returnStatement);
-		
-		md.statements = statements.toArray(new Statement[statements.size()]);
 		
 		TypeReference paramType = new QualifiedTypeReference(TypeConstants.JAVA_UTIL_COLLECTION, NULL_POSS);
 		paramType = addTypeArgs(1, true, builderType, paramType, data.getTypeArgs());
-		Argument param = new Argument(data.getPluralName(), 0, paramType, 0);
+		Argument param = new Argument(data.getPluralName(), 0, paramType, ClassFileConstants.AccFinal);
+		
+		nullBehaviorize(builderType, data, statements, param, md);
+		if (returnStatement != null) statements.add(returnStatement);
+		
+		md.statements = statements.toArray(new Statement[0]);
+		
 		md.arguments = new Argument[] {param};
 		md.returnType = returnType;
-		md.selector = fluent ? data.getPluralName() : HandlerUtil.buildAccessorName("addAll", new String(data.getPluralName())).toCharArray();
-		md.annotations = deprecate ? new Annotation[] { generateDeprecatedAnnotation(data.getSource()) } : null;
+		addCheckerFrameworkReturnsReceiver(md.returnType, data.getSource(), cfv);
+		char[] prefixedSelector = data.getSetterPrefix().length == 0 ? data.getPluralName() : HandlerUtil.buildAccessorName(builderType, new String(data.getSetterPrefix()), new String(data.getPluralName())).toCharArray();
+		md.selector = fluent ? prefixedSelector : HandlerUtil.buildAccessorName(builderType, "addAll", new String(data.getPluralName())).toCharArray();
+		Annotation[] selfReturnAnnotations = generateSelfReturnAnnotations(deprecate, data.getSource());
+		Annotation[] copyToSetterAnnotations = copyAnnotations(md, findCopyableToSetterAnnotations(data.getAnnotation().up()));
+		md.annotations = concat(selfReturnAnnotations, copyToSetterAnnotations, Annotation.class);
 		
+		if (returnStatement != null) createRelevantNonNullAnnotation(builderType, md);
 		data.setGeneratedByRecursive(md);
 		injectMethod(builderType, md);
+	}
+	
+	@Override protected int getTypeArgumentsCount() {
+		return 1;
 	}
 }

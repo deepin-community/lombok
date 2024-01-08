@@ -9,19 +9,17 @@ Bug-Debian: https://bugs.debian.org/910748
  src/core/lombok/javac/JavacAST.java | 32 --------------------------------
  1 file changed, 32 deletions(-)
 
-diff --git a/src/core/lombok/javac/JavacAST.java b/src/core/lombok/javac/JavacAST.java
-index acf4b4d..b7f0027 100644
 --- a/src/core/lombok/javac/JavacAST.java
 +++ b/src/core/lombok/javac/JavacAST.java
-@@ -511,7 +511,6 @@ public class JavacAST extends AST<JavacAST, JavacNode, JCTree> {
+@@ -662,7 +662,6 @@
  					break;
  				}
  			}
 -			if (hasMultipleErrors) return new JdkBefore9(log, messager, errorCount);
- 
- 			Field warningCount = null;
- 			try {
-@@ -524,37 +523,6 @@ public class JavacAST extends AST<JavacAST, JavacNode, JCTree> {
+ 			
+ 			Field warningCount; try {
+ 				warningCount = Permit.getField(messager.getClass(), "warningCount");
+@@ -674,37 +673,6 @@
  		}
  	}
  	

@@ -1,0 +1,42 @@
+Description: Do not override the default settings from ivy-debian-helper
+Author: Emmanuel Bourg <ebourg@apache.org>
+Forwarded: not-needed
+--- a/buildScripts/setup.ant.xml
++++ b/buildScripts/setup.ant.xml
+@@ -151,7 +151,7 @@
+ 	<target name="ipp.setup" depends="-ipp.load, -ipp.redownload" />
+ 	
+ 	<target name="ivy.config" depends="ipp.setup" unless="ivy.config">
+-		<ivy:configure file="buildScripts/ivysettings.xml" />
++		<ivy:configure file="/usr/share/ivy-debian-helper/ivysettings.xml" />
+ 		<property name="ivy.config" value="true" />
+ 	</target>
+ 	
+--- a/buildScripts/ivy.xml
++++ b/buildScripts/ivy.xml
+@@ -38,7 +38,7 @@
+ 	<dependencies>
+ 		
+ 		<dependency org="org.projectlombok" name="lombok.patcher" rev="0.44" conf="build,stripe->default" />
+-		<dependency org="zwitserloot.com" name="cmdreader" rev="1.2" conf="build,stripe->runtime" />
++		<dependency org="zwitserloot.com" name="cmdreader" rev="1.2" conf="build,stripe->default" />
+ 		<dependency org="org.apache.ant" name="ant" rev="1.10.5" conf="build->default" />
+ 		<dependency org="org.apache.ant" name="ant-junit" rev="1.10.5" conf="build->default" />
+ 		
+@@ -59,7 +59,7 @@
+ 		
+ 		<!-- build tooling -->
+ 		<dependency org="com.hierynomus" name="sshj" rev="0.26.0" conf="buildtools->default" />
+-		<dependency org="projectlombok.org" name="markdownj" rev="1.02b4" conf="buildtools->build" />
++		<dependency org="projectlombok.org" name="markdownj" rev="1.02b4" conf="buildtools->default" />
+ 		<dependency org="de.java2html" name="java2html" rev="5.0" conf="buildtools->default" />
+ 		<dependency org="org.freemarker" name="freemarker" rev="2.3.28" conf="buildtools->default" />
+ 		<dependency org="com.sparkjava" name="spark-core" rev="2.9.2" conf="buildtools->default" />
+@@ -88,6 +88,7 @@
+ 		
+ 		<dependency org="org.eclipse.platform" name="org.eclipse.core.runtime" rev="3.13.0" conf="eclipse-oxygen->default" transitive="false" />
+ 		<dependency org="org.eclipse.jdt" name="org.eclipse.jdt.core" rev="3.13.102" conf="eclipse-oxygen->default" transitive="false" />
++		<dependency org="org.eclipse.jdt" name="org.eclipse.jdt.core.manipulation" rev="debian" conf="eclipse-oxygen->default" />
+ 		<dependency org="org.eclipse.jdt" name="org.eclipse.jdt.ui" rev="3.13.100" conf="eclipse-oxygen->default" transitive="false" />
+ 		<dependency org="org.eclipse.platform" name="org.eclipse.equinox.common" rev="3.9.0" conf="eclipse-oxygen->default" transitive="false" />
+ 		<dependency org="org.eclipse.platform" name="org.eclipse.equinox.registry" rev="3.7.0" conf="eclipse-oxygen->default" transitive="false" />

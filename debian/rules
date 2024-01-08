@@ -1,25 +1,13 @@
 #!/usr/bin/make -f
 
-export JAVA_HOME=/usr/lib/jvm/default-java
+include /usr/share/dpkg/pkg-info.mk
 
 %:
-	dh $@ --with javahelper,maven_repo_helper
+	dh $@ --buildsystem=ivy --with maven_repo_helper
 
 override_dh_auto_build:
-	ant -Dbasedir=$(CURDIR) \
-		-Dlombok.version=1.16.22 \
-	        -Drt-openjdk6.available=true \
-	        -Drt-openjdk8.available=true \
-		dist dist-utils
-
-override_jh_linkjars:
-	jh_linkjars
-	$(RM) \
-		lib/runtime/ant* \
-		lib/runtime/ivy* \
-		lib/runtime/jdi* \
-		lib/runtime/jna* \
-		lib/runtime/spi* \
-		lib/runtime/maven* \
-		lib/runtime/ecj* \
-		lib/runtime/eclipse-ecj*
+	dh_auto_build -- -Divy.default.ivy.user.dir=$(shell pwd)/.ivy -Dbasedir=$(CURDIR) \
+	        -Dlombok.version=$(DEB_VERSION_UPSTREAM) \
+	        -Djdk6-rt.available=true \
+	        -Djdk8-rt.available=true \
+	        dist

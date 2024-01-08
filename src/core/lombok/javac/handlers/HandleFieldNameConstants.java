@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2018 The Project Lombok Authors.
+ * Copyright (C) 2014-2021 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,55 +24,69 @@ package lombok.javac.handlers;
 import static lombok.core.handlers.HandlerUtil.handleExperimentalFlagUsage;
 import static lombok.javac.handlers.JavacHandlerUtil.*;
 
-import java.lang.reflect.Modifier;
-import java.util.Collection;
+import java.util.ArrayList;
 
 import lombok.AccessLevel;
 import lombok.ConfigurationKeys;
 import lombok.core.AST.Kind;
-import lombok.core.handlers.HandlerUtil;
 import lombok.core.AnnotationValues;
+import lombok.core.configuration.IdentifierName;
+import lombok.core.handlers.HandlerUtil;
 import lombok.experimental.FieldNameConstants;
 import lombok.javac.JavacAnnotationHandler;
 import lombok.javac.JavacNode;
 import lombok.javac.JavacTreeMaker;
-
-import org.mangosdk.spi.ProviderFor;
+import lombok.spi.Provides;
 
 import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.JCAnnotation;
+import com.sun.tools.javac.tree.JCTree.JCBlock;
 import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
+import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
 import com.sun.tools.javac.tree.JCTree.JCModifiers;
+import com.sun.tools.javac.tree.JCTree.JCStatement;
+import com.sun.tools.javac.tree.JCTree.JCTypeParameter;
 import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
-import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
+import com.sun.tools.javac.util.List;
+import com.sun.tools.javac.util.Name;
 
-@ProviderFor(JavacAnnotationHandler.class)
+@Provides
 public class HandleFieldNameConstants extends JavacAnnotationHandler<FieldNameConstants> {
-	public void generateFieldNameConstantsForType(JavacNode typeNode, JavacNode errorNode, AccessLevel level) {
-		JCClassDecl typeDecl = null;
-		if (typeNode.get() instanceof JCClassDecl) typeDecl = (JCClassDecl) typeNode.get();
-		
-		long modifiers = typeDecl == null ? 0 : typeDecl.mods.flags;
-		boolean notAClass = (modifiers & (Flags.INTERFACE | Flags.ANNOTATION)) != 0;
-		
-		if (typeDecl == null || notAClass) {
-			errorNode.addError("@FieldNameConstants is only supported on a class, an enum, or a field.");
+	private static final IdentifierName FIELDS = IdentifierName.valueOf("Fields");
+
+	public void generateFieldNameConstantsForType(JavacNode typeNode, JavacNode errorNode, AccessLevel level, boolean asEnum, IdentifierName innerTypeName, boolean onlyExplicit, boolean uppercase) {
+		if (!isClassEnumOrRecord(typeNode)) {
+			errorNode.addError("@FieldNameConstants is only supported on a class, an enum or a record.");
+			return;
+		}
+		if (!isStaticAllowed(typeNode)) {
+			errorNode.addError("@FieldNameConstants is not supported on non-static nested classes.");
 			return;
 		}
 		
+		java.util.List<JavacNode> qualified = new ArrayList<JavacNode>();
+		
 		for (JavacNode field : typeNode.down()) {
-			if (fieldQualifiesForFieldNameConstantsGeneration(field)) generateFieldNameConstantsForField(field, errorNode.get(), level);
+			if (fieldQualifiesForFieldNameConstantsGeneration(field, onlyExplicit)) qualified.add(field);
+		}
+		
+		if (qualified.isEmpty()) {
+			errorNode.addWarning("No fields qualify for @FieldNameConstants, therefore this annotation does nothing");
+		} else {
+			createInnerTypeFieldNameConstants(typeNode, errorNode, level, qualified, asEnum, innerTypeName, uppercase);
 		}
 	}
 	
-	private void generateFieldNameConstantsForField(JavacNode fieldNode, DiagnosticPosition pos, AccessLevel level) {
-		if (hasAnnotation(FieldNameConstants.class, fieldNode)) return;
-		createFieldNameConstantsForField(level, fieldNode, fieldNode, false);
-	}
-	
-	private boolean fieldQualifiesForFieldNameConstantsGeneration(JavacNode field) {
+	private boolean fieldQualifiesForFieldNameConstantsGeneration(JavacNode field, boolean onlyExplicit) {
 		if (field.getKind() != Kind.FIELD) return false;
+		boolean exclAnn = JavacHandlerUtil.hasAnnotationAndDeleteIfNeccessary(FieldNameConstants.Exclude.class, field);
+		boolean inclAnn = JavacHandlerUtil.hasAnnotationAndDeleteIfNeccessary(FieldNameConstants.Include.class, field);
+		if (exclAnn) return false;
+		if (inclAnn) return true;
+		if (onlyExplicit) return false;
+		
 		JCVariableDecl fieldDecl = (JCVariableDecl) field.get();
 		if (fieldDecl.name.toString().startsWith("$")) return false;
 		if ((fieldDecl.mods.flags & Flags.STATIC) != 0) return false;
@@ -82,50 +96,97 @@ public class HandleFieldNameConstants extends JavacAnnotationHandler<FieldNameCo
 	public void handle(AnnotationValues<FieldNameConstants> annotation, JCAnnotation ast, JavacNode annotationNode) {
 		handleExperimentalFlagUsage(annotationNode, ConfigurationKeys.FIELD_NAME_CONSTANTS_FLAG_USAGE, "@FieldNameConstants");
 		
-		Collection<JavacNode> fields = annotationNode.upFromAnnotationToFields();
 		deleteAnnotationIfNeccessary(annotationNode, FieldNameConstants.class);
 		deleteImportFromCompilationUnit(annotationNode, "lombok.AccessLevel");
 		JavacNode node = annotationNode.up();
-		FieldNameConstants annotatationInstance = annotation.getInstance();
-		AccessLevel level = annotatationInstance.level();
-		if (node == null) return;
-		switch (node.getKind()) {
-		case FIELD:
-			if (level != AccessLevel.NONE) createFieldNameConstantsForFields(level, fields, annotationNode, annotationNode, true);
-			break;
-		case TYPE:
-			if (level == AccessLevel.NONE) {
-				annotationNode.addWarning("type-level '@FieldNameConstants' does not work with AccessLevel.NONE.");
+		FieldNameConstants annotationInstance = annotation.getInstance();
+		AccessLevel level = annotationInstance.level();
+		boolean asEnum = annotationInstance.asEnum();
+		boolean usingLombokv1_18_2 = annotation.isExplicit("prefix") || annotation.isExplicit("suffix") || node.getKind() == Kind.FIELD;
+		
+		if (usingLombokv1_18_2) {
+			annotationNode.addError("@FieldNameConstants has been redesigned in lombok v1.18.4; please upgrade your project dependency on lombok. See https://projectlombok.org/features/experimental/FieldNameConstants for more information.");
+			return;
+		}
+		
+		
+		if (level == AccessLevel.NONE) {
+			annotationNode.addWarning("AccessLevel.NONE is not compatible with @FieldNameConstants. If you don't want the inner type, simply remove @FieldNameConstants.");
+			return;
+		}
+		
+		IdentifierName innerTypeName;
+		try {
+			innerTypeName = IdentifierName.valueOf(annotationInstance.innerTypeName());
+		} catch(IllegalArgumentException e) {
+			annotationNode.addError("InnerTypeName " + annotationInstance.innerTypeName() + " is not a valid Java identifier.");
+			return;
+		}
+		if (innerTypeName == null) innerTypeName = annotationNode.getAst().readConfiguration(ConfigurationKeys.FIELD_NAME_CONSTANTS_INNER_TYPE_NAME);
+		if (innerTypeName == null) innerTypeName = FIELDS;
+		Boolean uppercase = annotationNode.getAst().readConfiguration(ConfigurationKeys.FIELD_NAME_CONSTANTS_UPPERCASE);
+		if (uppercase == null) uppercase = false;
+		
+		generateFieldNameConstantsForType(node, annotationNode, level, asEnum, innerTypeName, annotationInstance.onlyExplicitlyIncluded(), uppercase);
+	}
+	
+	private void createInnerTypeFieldNameConstants(JavacNode typeNode, JavacNode errorNode, AccessLevel level, java.util.List<JavacNode> fields, boolean asEnum, IdentifierName innerTypeName, boolean uppercase) {
+		if (fields.isEmpty()) return;
+		
+		JavacTreeMaker maker = typeNode.getTreeMaker();
+		JCModifiers mods = maker.Modifiers(toJavacModifier(level) | (asEnum ? Flags.ENUM : Flags.STATIC | Flags.FINAL));
+		
+		Name fieldsName = typeNode.toName(innerTypeName.getName());
+		
+		JavacNode fieldsType = findInnerClass(typeNode, innerTypeName.getName());
+		boolean genConstr = false;
+		if (fieldsType == null) {
+			JCClassDecl innerType = maker.ClassDef(mods, fieldsName, List.<JCTypeParameter>nil(), null, List.<JCExpression>nil(), List.<JCTree>nil());
+			fieldsType = injectType(typeNode, innerType);
+			recursiveSetGeneratedBy(innerType, errorNode);
+			genConstr = true;
+		} else {
+			JCClassDecl builderTypeDeclaration = (JCClassDecl) fieldsType.get();
+			long f = builderTypeDeclaration.getModifiers().flags;
+			if (asEnum && (f & Flags.ENUM) == 0) {
+				errorNode.addError("Existing " + innerTypeName + " must be declared as an 'enum'.");
 				return;
 			}
-			generateFieldNameConstantsForType(node, annotationNode, level);
-			break;
-		}
-	}
-	
-	private void createFieldNameConstantsForFields(AccessLevel level, Collection<JavacNode> fieldNodes, JavacNode annotationNode, JavacNode errorNode, boolean whineIfExists) {
-		for (JavacNode fieldNode : fieldNodes) createFieldNameConstantsForField(level, fieldNode, errorNode, whineIfExists);
-	}
-	
-	private void createFieldNameConstantsForField(AccessLevel level, JavacNode fieldNode, JavacNode source, boolean whineIfExists) {
-		if (fieldNode.getKind() != Kind.FIELD) {
-			source.addError("@FieldNameConstants is only supported on a class, an enum, or a field");
-			return;
+			if (!asEnum && (f & Flags.STATIC) == 0) {
+				errorNode.addError("Existing " + innerTypeName + " must be declared as a 'static class'.");
+				return;
+			}
+			genConstr = constructorExists(fieldsType) == MemberExistsResult.NOT_EXISTS;
 		}
 		
-		JCVariableDecl field = (JCVariableDecl) fieldNode.get();
-		String fieldName = field.name.toString();
-		String constantName = HandlerUtil.camelCaseToConstant(fieldName);
-		if (constantName.equals(fieldName)) {
-			fieldNode.addWarning("Not generating constant for this field: The name of the constant would be equal to the name of this field.");
-			return;
+		if (genConstr) {
+			JCModifiers genConstrMods = maker.Modifiers(Flags.GENERATEDCONSTR | (asEnum ? 0L : Flags.PRIVATE));
+			JCBlock genConstrBody = maker.Block(0L, List.<JCStatement>of(maker.Exec(maker.Apply(List.<JCExpression>nil(), maker.Ident(typeNode.toName("super")), List.<JCExpression>nil()))));
+			JCMethodDecl c = maker.MethodDef(genConstrMods, typeNode.toName("<init>"), null, List.<JCTypeParameter>nil(), List.<JCVariableDecl>nil(), List.<JCExpression>nil(), genConstrBody, null);
+			recursiveSetGeneratedBy(c, errorNode);
+			injectMethod(fieldsType, c);
 		}
 		
-		JavacTreeMaker treeMaker = fieldNode.getTreeMaker();
-		JCModifiers modifiers = treeMaker.Modifiers(toJavacModifier(level) | Modifier.STATIC | Modifier.FINAL);
-		JCExpression returnType = chainDots(fieldNode, "java", "lang", "String");
-		JCExpression init = treeMaker.Literal(fieldNode.getName());
-		JCVariableDecl fieldConstant = treeMaker.VarDef(modifiers, fieldNode.toName(constantName), returnType, init);
-		injectField(fieldNode.up(), fieldConstant);
+		java.util.List<JCVariableDecl> generated = new ArrayList<JCVariableDecl>();
+		for (JavacNode field : fields) {
+			Name fName = ((JCVariableDecl) field.get()).name;
+			if (uppercase) fName = typeNode.toName(HandlerUtil.camelCaseToConstant(fName.toString()));
+			if (fieldExists(fName.toString(), fieldsType) != MemberExistsResult.NOT_EXISTS) continue;
+			JCModifiers constantValueMods = maker.Modifiers(Flags.PUBLIC | Flags.STATIC | Flags.FINAL | (asEnum ? Flags.ENUM : 0L));
+			JCExpression returnType;
+			JCExpression init;
+			if (asEnum) {
+				returnType = maker.Ident(fieldsName);
+				init = maker.NewClass(null, List.<JCExpression>nil(), maker.Ident(fieldsName), List.<JCExpression>nil(), null);
+			} else {
+				returnType = chainDots(field, "java", "lang", "String");
+				init = maker.Literal(field.getName());
+			}
+			JCVariableDecl constantField = maker.VarDef(constantValueMods, fName, returnType, init);
+			injectField(fieldsType, constantField, false, true);
+			setGeneratedBy(constantField, errorNode);
+			generated.add(constantField);
+		}
+		for (JCVariableDecl cf : generated) recursiveSetGeneratedBy(cf, errorNode);
 	}
 }

@@ -1,0 +1,14 @@
+
+s/zwitserloot.com/com.zwitserloot/ cmdreader * s/.*/debian/ * *
+s/projectlombok.org/org.mangosdk.spi/ spi * s/.*/debian/ * *
+
+s/org.eclipse.jdt.core.compiler/org.eclipse.jdt/ s/ecj/org.eclipse.jdt.core/ * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.core/ org.eclipse.core.resources * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.core/ org.eclipse.core.runtime * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.core/ org.eclipse.core.contenttype * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.core/ org.eclipse.core.jobs * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.equinox/ org.eclipse.equinox.common * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.equinox/ org.eclipse.equinox.registry * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.equinox/ org.eclipse.equinox.app * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.osgi/ org.eclipse.osgi * s/.*/debian/ * *
+s/org.eclipse.platform/org.eclipse.text/ org.eclipse.text * s/.*/debian/ * *

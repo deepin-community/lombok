@@ -1,0 +1,14 @@
+Description: Do not download external dependencies
+Author: Markus Koschany <apo@debian.org>
+Forwarded: not-needed
+--- a/buildScripts/setup.ant.xml
++++ b/buildScripts/setup.ant.xml
+@@ -148,7 +148,7 @@
+ 		<fail>A new version of ivyplusplus was required and has been downloaded. Rerun the script to continue.</fail>
+ 	</target>
+ 	
+-	<target name="ipp.setup" depends="-ipp.load, -ipp.redownload" />
++	<target name="ipp.setup" />
+ 	
+ 	<target name="ivy.config" depends="ipp.setup" unless="ivy.config">
+ 		<ivy:configure file="/usr/share/ivy-debian-helper/ivysettings.xml" />

@@ -21,6 +21,7 @@
  */
 package lombok.installer.eclipse;
 
+import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +35,8 @@ import lombok.installer.OsUtils;
 public class StandardProductDescriptor implements EclipseProductDescriptor {
 	
 	private static final String USER_HOME = System.getProperty("user.home", ".");
-	private static final String[] WINDOWS_ROOTS = {"\\", "\\Program Files", "\\Program Files (x86)", USER_HOME};
+	private static final String[] BASE_WINDOWS_ROOTS = {"\\", "\\Program Files", "\\Program Files (x86)", "\\ProgramData\\Chocolatey\\lib"};
+	private static final String[] WINDOWS_ROOTS = windowsRoots();
 	private static final String[] MAC_ROOTS = {"/Applications", USER_HOME};
 	private static final String[] UNIX_ROOTS = {USER_HOME};
 	
@@ -154,5 +156,20 @@ public class StandardProductDescriptor implements EclipseProductDescriptor {
 			return base + alternative.replaceAll("[\\/]", "\\" + pathSeparator);
 		}
 		return base + pathSeparator + alternative.replaceAll("[\\/]", "\\" + pathSeparator);
+	}
+	
+	private static String[] windowsRoots() {
+		String localAppData = windowsLocalAppData();
+		String[] out = new String[BASE_WINDOWS_ROOTS.length + (localAppData == null ? 1 : 2)];
+		System.arraycopy(BASE_WINDOWS_ROOTS, 0, out, 0, BASE_WINDOWS_ROOTS.length);
+		out[BASE_WINDOWS_ROOTS.length] = USER_HOME;
+		if (localAppData != null) out[BASE_WINDOWS_ROOTS.length + 1] = localAppData;
+		return out;
+	}
+	
+	private static String windowsLocalAppData() {
+		String localAppData = System.getenv("LOCALAPPDATA");
+		File file = localAppData == null ? null : new File(localAppData);
+		return file != null && file.exists() && file.canRead() && file.isDirectory() ? localAppData : null;
 	}
 }

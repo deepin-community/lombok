@@ -50,10 +50,6 @@ class DataOnLocalClass1 {
         super();
         this.x = x;
       }
-      private @java.lang.SuppressWarnings("all") Local() {
-        super();
-        this.x = 0;
-      }
     }
   }
 }
@@ -68,7 +64,7 @@ class DataOnLocalClass2 {
         public @java.lang.SuppressWarnings("all") void setName(final @lombok.NonNull String name) {
           if ((name == null))
               {
-                throw new java.lang.NullPointerException("name");
+                throw new java.lang.NullPointerException("name is marked non-null but is null");
               }
           this.name = name;
         }
@@ -103,12 +99,9 @@ class DataOnLocalClass2 {
           super();
           if ((name == null))
               {
-                throw new java.lang.NullPointerException("name");
+                throw new java.lang.NullPointerException("name is marked non-null but is null");
               }
           this.name = name;
-        }
-        private @java.lang.SuppressWarnings("all") InnerLocal() {
-          super();
         }
       }
       final int x;
@@ -142,10 +135,6 @@ class DataOnLocalClass2 {
       public @java.lang.SuppressWarnings("all") Local(final int x) {
         super();
         this.x = x;
-      }
-      private @java.lang.SuppressWarnings("all") Local() {
-        super();
-        this.x = 0;
       }
     }
   }

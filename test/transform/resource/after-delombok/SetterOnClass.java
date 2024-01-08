@@ -1,3 +1,4 @@
+//version 8:
 class SetterOnClass1 {
 	boolean isNone;
 	boolean isPublic;
@@ -54,7 +55,7 @@ class SetterOnClass6 {
 	@java.lang.SuppressWarnings("all")
 	public void setNonNull(@lombok.NonNull final String nonNull) {
 		if (nonNull == null) {
-			throw new java.lang.NullPointerException("nonNull");
+			throw new java.lang.NullPointerException("nonNull is marked non-null but is null");
 		}
 		this.nonNull = nonNull;
 	}
