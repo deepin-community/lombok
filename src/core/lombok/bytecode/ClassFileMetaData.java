@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2018 The Project Lombok Authors.
+ * Copyright (C) 2010-2019 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,7 @@ public class ClassFileMetaData {
 	// New in java7: support for methodhandles and invokedynamic
 	private static final byte METHOD_HANDLE = 15;
 	private static final byte METHOD_TYPE = 16;
+	private static final byte DYNAMIC = 17;
 	private static final byte INVOKE_DYNAMIC = 18;
 	// New in java9: support for modules
 	private static final byte MODULE = 19;
@@ -96,6 +97,7 @@ public class ClassFileMetaData {
 			case INTERFACE_METHOD:
 			case NAME_TYPE:
 			case INVOKE_DYNAMIC:
+			case DYNAMIC:
 				position += 4;
 				break;
 			case LONG:
@@ -116,23 +118,24 @@ public class ClassFileMetaData {
 		int end = pos + size;
 		
 		// the resulting string might be smaller
-		StringBuilder result = new StringBuilder(size);
+		char[] result = new char[size];
+		int length = 0;
 		while (pos < end) {
 			int first = (byteCode[pos++] & 0xFF);
 			if (first < 0x80) {
-				result.append((char)first);
+				result[length++] = (char)first;
 			} else if ((first & 0xE0) == 0xC0) {
 				int x = (first & 0x1F) << 6;
 				int y = (byteCode[pos++] & 0x3F);
-				result.append((char)(x | y));
+				result[length++] = (char)(x | y);
 			} else {
 				int x = (first & 0x0F) << 12;
 				int y = (byteCode[pos++] & 0x3F) << 6;
 				int z = (byteCode[pos++] & 0x3F);
-				result.append((char)(x | y | z));
+				result[length++] = (char)(x | y | z);
 			}
 		}
-		return result.toString();
+		return new String(result, 0, length);
 	}
 	
 	/**
@@ -386,6 +389,9 @@ public class ClassFileMetaData {
 				break;
 			case METHOD_TYPE:
 				result.append("MethodType...");
+				break;
+			case DYNAMIC:
+				result.append("Dynamic...");
 				break;
 			case INVOKE_DYNAMIC:
 				result.append("InvokeDynamic...");

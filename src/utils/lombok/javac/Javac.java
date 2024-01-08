@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2018 The Project Lombok Authors.
+ * Copyright (C) 2009-2019 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -36,23 +37,30 @@ import javax.lang.model.type.NoType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeVisitor;
 
-import lombok.core.ClassLiteral;
-import lombok.core.FieldSelect;
-import lombok.javac.JavacTreeMaker.TreeTag;
-import lombok.javac.JavacTreeMaker.TypeTag;
-
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Source;
 import com.sun.tools.javac.code.Symtab;
 import com.sun.tools.javac.code.Type;
 import com.sun.tools.javac.main.JavaCompiler;
+import com.sun.tools.javac.parser.Tokens.Comment;
+import com.sun.tools.javac.tree.DocCommentTable;
 import com.sun.tools.javac.tree.JCTree;
+import com.sun.tools.javac.tree.JCTree.JCAnnotation;
 import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCFieldAccess;
 import com.sun.tools.javac.tree.JCTree.JCIdent;
 import com.sun.tools.javac.tree.JCTree.JCLiteral;
+import com.sun.tools.javac.tree.JCTree.JCVariableDecl;
 import com.sun.tools.javac.util.JCDiagnostic.DiagnosticPosition;
+
+import lombok.core.ClassLiteral;
+import lombok.core.FieldSelect;
+import lombok.core.JavaIdentifiers;
+import lombok.javac.JavacTreeMaker.TreeTag;
+import lombok.javac.JavacTreeMaker.TypeTag;
+import lombok.permit.Permit;
 
 /**
  * Container for static utility methods relevant to lombok's operation on javac.
@@ -62,13 +70,18 @@ public class Javac {
 		// prevent instantiation
 	}
 	
-	/** Matches any of the 8 primitive names, such as {@code boolean}. */
-	private static final Pattern PRIMITIVE_TYPE_NAME_PATTERN = Pattern.compile("^(boolean|byte|short|int|long|float|double|char)$");
-	
 	private static final Pattern VERSION_PARSER = Pattern.compile("^(\\d{1,6})\\.?(\\d{1,6})?.*$");
 	private static final Pattern SOURCE_PARSER = Pattern.compile("^JDK(\\d{1,6})_?(\\d{1,6})?.*$");
 	
 	private static final AtomicInteger compilerVersion = new AtomicInteger(-1);
+	
+	/* This section includes flags that would ordinarily be in Flags, but which are 'too new' (we don't compile against older versions of javac for compatibility). */
+	public static final long RECORD = 1L << 61; // ClassSymbols, MethodSymbols, VarSymbols (Marks types as being records, as well as the 'fields' in the compact declaration, and the canonical constructor)
+	public static final long COMPACT_RECORD_CONSTRUCTOR = 1L << 51; // MethodSymbols (the 'implicit' many-args constructor that records have)
+	public static final long UNINITIALIZED_FIELD = 1L << 51; // VarSymbols (To identify fields that the compact record constructor won't initialize)
+	public static final long GENERATED_MEMBER = 1L << 24; // MethodSymbols, VarSymbols (marks methods and the constructor generated in records)
+	public static final long SEALED = 1L << 62; // ClassSymbols (Flag to indicate sealed class/interface declaration)
+	public static final long NON_SEALED = 1L << 63; // ClassSymbols (Flag to indicate that the class/interface was declared with the non-sealed modifier)
 	
 	/**
 	 * Returns the version of this java compiler, i.e. the JDK that it shipped in. For example, for javac v1.7, this returns {@code 7}.
@@ -128,8 +141,7 @@ public class Javac {
 	 * expression) represents a primitive type.
 	 */
 	public static boolean isPrimitive(JCExpression ref) {
-		String typeName = ref.toString();
-		return PRIMITIVE_TYPE_NAME_PATTERN.matcher(typeName).matches();
+		return JavaIdentifiers.isPrimitive(ref.toString());
 	}
 	
 	/**
@@ -199,7 +211,6 @@ public class Javac {
 	
 	static {
 		getExtendsClause = getMethod(JCClassDecl.class, "getExtendsClause", new Class<?>[0]);
-		getExtendsClause.setAccessible(true);
 		
 		if (getJavaCompilerVersion() < 8) {
 			getEndPosition = getMethod(DiagnosticPosition.class, "getEndPosition", java.util.Map.class);
@@ -214,11 +225,11 @@ public class Javac {
 				throw sneakyThrow(ex);
 			}
 			try {
-				storeEndMethodTemp = endPosTable.getMethod("storeEnd", JCTree.class, int.class);
+				storeEndMethodTemp = Permit.getMethod(endPosTable, "storeEnd", JCTree.class, int.class);
 			} catch (NoSuchMethodException e) {
 				try {
 					endPosTable = Class.forName("com.sun.tools.javac.parser.JavacParser$AbstractEndPosTable");
-					storeEndMethodTemp = endPosTable.getDeclaredMethod("storeEnd", JCTree.class, int.class);
+					storeEndMethodTemp = Permit.getMethod(endPosTable, "storeEnd", JCTree.class, int.class);
 				} catch (NoSuchMethodException ex) {
 					throw sneakyThrow(ex);
 				} catch (ClassNotFoundException ex) {
@@ -227,13 +238,13 @@ public class Javac {
 			}
 			storeEnd = storeEndMethodTemp;
 		}
-		getEndPosition.setAccessible(true);
-		storeEnd.setAccessible(true);
+		Permit.setAccessible(getEndPosition);
+		Permit.setAccessible(storeEnd);
 	}
 	
 	private static Method getMethod(Class<?> clazz, String name, Class<?>... paramTypes) {
 		try {
-			return clazz.getMethod(name, paramTypes);
+			return Permit.getMethod(clazz, name, paramTypes);
 		} catch (NoSuchMethodException e) {
 			throw sneakyThrow(e);
 		}
@@ -243,7 +254,7 @@ public class Javac {
 		try {
 			Class<?>[] c = new Class[paramTypes.length];
 			for (int i = 0; i < paramTypes.length; i++) c[i] = Class.forName(paramTypes[i]);
-			return clazz.getMethod(name, c);
+			return Permit.getMethod(clazz, name, c);
 		} catch (NoSuchMethodException e) {
 			throw sneakyThrow(e);
 		} catch (ClassNotFoundException e) {
@@ -251,6 +262,9 @@ public class Javac {
 		}
 	}
 	
+	/**
+	 * In some versions, the field's type is {@code JCTree}, in others it is {@code JCExpression}, which at the JVM level are not the same.
+	 */
 	public static JCTree getExtendsClause(JCClassDecl decl) {
 		try {
 			return (JCTree) getExtendsClause.invoke(decl);
@@ -267,6 +281,91 @@ public class Javac {
 		} catch (IllegalAccessException e) {
 			throw sneakyThrow(e);
 		}
+	}
+	
+	public static String getDocComment(JCCompilationUnit cu, JCTree node) {
+		Object dc = getDocComments(cu);
+		if (dc instanceof Map) return (String) ((Map<?, ?>) dc).get(node);
+		if (instanceOfDocCommentTable(dc)) return JavadocOps_8.getJavadoc(dc, node);
+		return null;
+	}
+	
+	/**
+	 * Checks if the javadoc comment associated with {@code tree} has a position set.
+	 * 
+	 * Returns true if there is no javadoc comment on the node, or it has position (position isn't -1).
+	 */
+	public static boolean validateDocComment(JCCompilationUnit cu, JCTree tree) {
+		Object dc = getDocComments(cu);
+		if (!instanceOfDocCommentTable(dc)) return true;
+		return JavadocOps_8.validateJavadoc(dc, tree);
+	}
+	
+	@SuppressWarnings("unchecked")
+	public static void setDocComment(JCCompilationUnit cu, JCTree node, String javadoc) {
+		if (javadoc == null) return;
+		Object dc = getDocComments(cu);
+		if (dc instanceof Map) {
+			((Map<JCTree, String>) dc).put(node, javadoc);
+			return;
+		}
+		
+		if (instanceOfDocCommentTable(dc)) {
+			JavadocOps_8.setJavadoc(dc, node, javadoc);
+			return;
+		}
+	}
+	
+	private static class JavadocOps_8 {
+		static String getJavadoc(Object dc, JCTree node) {
+			DocCommentTable dct = (DocCommentTable) dc;
+			Comment javadoc = dct.getComment(node);
+			if (javadoc == null) return null;
+			return javadoc.getText();
+		}
+		
+		public static boolean validateJavadoc(Object dc, JCTree node) {
+			DocCommentTable dct = (DocCommentTable) dc;
+			Comment javadoc = dct.getComment(node);
+			return javadoc == null || javadoc.getText() == null || javadoc.getSourcePos(0) >= 0;
+		}
+		
+		static void setJavadoc(Object dc, JCTree node, String javadoc) {
+			DocCommentTable dct = (DocCommentTable) dc;
+			Comment newCmt = createJavadocComment(javadoc, node);
+			dct.putComment(node, newCmt);
+		}
+		
+		private static Comment createJavadocComment(final String text, final JCTree field) {
+			return new Comment() {
+				@Override public String getText() {
+					return text;
+				}
+				
+				@Override public int getSourcePos(int index) {
+					return field == null ? -1 : field.getStartPosition();
+				}
+				
+				@Override public CommentStyle getStyle() {
+					return CommentStyle.JAVADOC;
+				}
+				
+				@Override public boolean isDeprecated() {
+					return text.contains("@deprecated") && field instanceof JCVariableDecl && isFieldDeprecated(field);
+				}
+			};
+		}
+	}
+	
+	public static boolean isFieldDeprecated(JCTree field) {
+		if (!(field instanceof JCVariableDecl)) return false;
+		JCVariableDecl fieldNode = (JCVariableDecl) field;
+		if ((fieldNode.mods.flags & Flags.DEPRECATED) != 0) return true;
+		if (fieldNode.mods.annotations != null) for (JCAnnotation ann : fieldNode.mods.annotations) {
+			String at = ann.getAnnotationType().toString();
+			return at.equals("Deprecated") || at.endsWith(".Deprecated");
+		}
+		return false;
 	}
 	
 	public static void initDocComments(JCCompilationUnit cu) {
@@ -293,6 +392,7 @@ public class Javac {
 	public static void storeEnd(JCTree tree, int pos, JCCompilationUnit top) {
 		try {
 			Object endPositions = JCCOMPILATIONUNIT_ENDPOSITIONS.get(top);
+			if (endPositions == null) return;
 			storeEnd.invoke(endPositions, tree, pos);
 		} catch (IllegalAccessException e) {
 			throw sneakyThrow(e);
@@ -320,7 +420,7 @@ public class Javac {
 	
 	private static Field getFieldIfExists(Class<?> c, String fieldName) {
 		try {
-			return c.getField("voidType");
+			return Permit.getField(c, "voidType");
 		} catch (Exception e) {
 			return null;
 		}
@@ -336,10 +436,14 @@ public class Javac {
 		} else {
 			try {
 				if (CTC_VOID.equals(tag)) {
-					return (Type) JC_VOID_TYPE.newInstance();
+					return (Type) JC_VOID_TYPE.getConstructor().newInstance();
 				} else {
-					return (Type) JC_NO_TYPE.newInstance();
+					return (Type) JC_NO_TYPE.getConstructor().newInstance();
 				}
+			} catch (InvocationTargetException e) {
+				throw sneakyThrow(e.getCause());
+			} catch (NoSuchMethodException e) {
+				throw sneakyThrow(e);
 			} catch (IllegalAccessException e) {
 				throw sneakyThrow(e);
 			} catch (InstantiationException e) {
@@ -370,13 +474,13 @@ public class Javac {
 	static {
 		Field f = null;
 		try {
-			f = JCCompilationUnit.class.getDeclaredField("endPositions");
+			f = Permit.getField(JCCompilationUnit.class, "endPositions");
 		} catch (NoSuchFieldException e) {}
 		JCCOMPILATIONUNIT_ENDPOSITIONS = f;
 		
 		f = null;
 		try {
-			f = JCCompilationUnit.class.getDeclaredField("docComments");
+			f = Permit.getField(JCCompilationUnit.class, "docComments");
 		} catch (NoSuchFieldException e) {}
 		JCCOMPILATIONUNIT_DOCCOMMENTS = f;
 	}

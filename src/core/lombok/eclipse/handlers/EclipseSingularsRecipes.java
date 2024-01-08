@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2017 The Project Lombok Authors.
+ * Copyright (C) 2015-2021 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,18 +33,26 @@ import java.util.Map;
 
 import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.Annotation;
+import org.eclipse.jdt.internal.compiler.ast.Argument;
+import org.eclipse.jdt.internal.compiler.ast.Block;
 import org.eclipse.jdt.internal.compiler.ast.ConditionalExpression;
 import org.eclipse.jdt.internal.compiler.ast.EqualExpression;
 import org.eclipse.jdt.internal.compiler.ast.Expression;
 import org.eclipse.jdt.internal.compiler.ast.FieldDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.FieldReference;
+import org.eclipse.jdt.internal.compiler.ast.IfStatement;
 import org.eclipse.jdt.internal.compiler.ast.IntLiteral;
 import org.eclipse.jdt.internal.compiler.ast.MessageSend;
+import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.NullLiteral;
 import org.eclipse.jdt.internal.compiler.ast.OperatorIds;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedSingleTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
+import org.eclipse.jdt.internal.compiler.ast.Reference;
+import org.eclipse.jdt.internal.compiler.ast.ReturnStatement;
+import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.Statement;
 import org.eclipse.jdt.internal.compiler.ast.ThisReference;
@@ -53,13 +61,25 @@ import org.eclipse.jdt.internal.compiler.ast.Wildcard;
 import org.eclipse.jdt.internal.compiler.lookup.ClassScope;
 import org.eclipse.jdt.internal.compiler.lookup.MethodScope;
 import org.eclipse.jdt.internal.compiler.lookup.TypeConstants;
+import org.eclipse.jdt.internal.compiler.lookup.TypeIds;
 
+import lombok.AccessLevel;
 import lombok.core.LombokImmutableList;
 import lombok.core.SpiLoadUtil;
 import lombok.core.TypeLibrary;
+import lombok.core.configuration.CheckerFrameworkVersion;
 import lombok.eclipse.EclipseNode;
+import lombok.eclipse.handlers.HandleBuilder.BuilderJob;
 
 public class EclipseSingularsRecipes {
+	public interface TypeReferenceMaker {
+		TypeReference make();
+	}
+	
+	public interface StatementMaker {
+		Statement make();
+	}
+	
 	private static final EclipseSingularsRecipes INSTANCE = new EclipseSingularsRecipes();
 	private final Map<String, EclipseSingularizer> singularizers = new HashMap<String, EclipseSingularizer>();
 	private final TypeLibrary singularizableTypes = new TypeLibrary();
@@ -94,7 +114,9 @@ public class EclipseSingularsRecipes {
 	}
 	
 	public String toQualified(String typeReference) {
-		return singularizableTypes.toQualified(typeReference);
+		List<String> q = singularizableTypes.toQualifieds(typeReference);
+		if (q.isEmpty()) return null;
+		return q.get(0);
 	}
 	
 	public EclipseSingularizer getSingularizer(String fqn) {
@@ -105,12 +127,18 @@ public class EclipseSingularsRecipes {
 		private final EclipseNode annotation;
 		private final char[] singularName;
 		private final char[] pluralName;
+		private final char[] setterPrefix;
 		private final List<TypeReference> typeArgs;
 		private final String targetFqn;
 		private final EclipseSingularizer singularizer;
+		private final boolean ignoreNullCollections;
 		private final ASTNode source;
 		
-		public SingularData(EclipseNode annotation, char[] singularName, char[] pluralName, List<TypeReference> typeArgs, String targetFqn, EclipseSingularizer singularizer, ASTNode source) {
+		public SingularData(EclipseNode annotation, char[] singularName, char[] pluralName, List<TypeReference> typeArgs, String targetFqn, EclipseSingularizer singularizer, ASTNode source, boolean ignoreNullCollections) {
+			this(annotation, singularName, pluralName, typeArgs, targetFqn, singularizer, source, ignoreNullCollections, new char[0]);
+		}
+		
+		public SingularData(EclipseNode annotation, char[] singularName, char[] pluralName, List<TypeReference> typeArgs, String targetFqn, EclipseSingularizer singularizer, ASTNode source, boolean ignoreNullCollections, char[] setterPrefix) {
 			this.annotation = annotation;
 			this.singularName = singularName;
 			this.pluralName = pluralName;
@@ -118,6 +146,8 @@ public class EclipseSingularsRecipes {
 			this.targetFqn = targetFqn;
 			this.singularizer = singularizer;
 			this.source = source;
+			this.ignoreNullCollections = ignoreNullCollections;
+			this.setterPrefix = setterPrefix;
 		}
 		
 		public void setGeneratedByRecursive(ASTNode target) {
@@ -148,6 +178,10 @@ public class EclipseSingularsRecipes {
 			return pluralName;
 		}
 		
+		public char[] getSetterPrefix() {
+			return setterPrefix;
+		}
+		
 		public List<TypeReference> getTypeArgs() {
 			return typeArgs;
 		}
@@ -158,6 +192,10 @@ public class EclipseSingularsRecipes {
 		
 		public EclipseSingularizer getSingularizer() {
 			return singularizer;
+		}
+		
+		public boolean isIgnoreNullCollections() {
+			return ignoreNullCollections;
 		}
 		
 		public String getTargetSimpleType() {
@@ -215,8 +253,40 @@ public class EclipseSingularsRecipes {
 		}
 		
 		public abstract List<EclipseNode> generateFields(SingularData data, EclipseNode builderType);
-		public abstract void generateMethods(SingularData data, boolean deprecate, EclipseNode builderType, boolean fluent, boolean chain);
-		public abstract void appendBuildCode(SingularData data, EclipseNode builderType, List<Statement> statements, char[] targetVariableName);
+		
+		/**
+		 * Generates the singular, plural, and clear methods for the given {@link SingularData}.
+		 * Uses the given {@code builderType} as return type if {@code chain == true}, {@code void} otherwise.
+		 * If you need more control over the return type and value, use
+		 * {@link #generateMethods(SingularData, boolean, EclipseNode, boolean, TypeReferenceMaker, StatementMaker)}.
+		 */
+		public void generateMethods(final BuilderJob job, SingularData data, boolean deprecate) {
+			TypeReferenceMaker returnTypeMaker = new TypeReferenceMaker() {
+				@Override public TypeReference make() {
+					return job.oldChain ? cloneSelfType(job.builderType) : TypeReference.baseTypeReference(TypeIds.T_void, 0);
+				}
+			};
+			
+			StatementMaker returnStatementMaker = new StatementMaker() {
+				@Override public ReturnStatement make() {
+					return job.oldChain ? new ReturnStatement(new ThisReference(0, 0), 0, 0) : null;
+				}
+			};
+			
+			generateMethods(job.checkerFramework, data, deprecate, job.builderType, job.oldFluent, returnTypeMaker, returnStatementMaker, job.accessInners);
+		}
+		
+		/**
+		 * Generates the singular, plural, and clear methods for the given {@link SingularData}.
+		 * Uses the given {@code returnTypeMaker} and {@code returnStatementMaker} for the generated methods.
+		 */
+		public abstract void generateMethods(CheckerFrameworkVersion cfv, SingularData data, boolean deprecate, EclipseNode builderType, boolean fluent, TypeReferenceMaker returnTypeMaker, StatementMaker returnStatementMaker, AccessLevel access);
+		
+		public abstract void appendBuildCode(SingularData data, EclipseNode builderType, List<Statement> statements, char[] targetVariableName, String builderVariable);
+		
+		public boolean shadowedDuringBuild() {
+			return true;
+		}
 		
 		public boolean requiresCleaning() {
 			try {
@@ -230,6 +300,12 @@ public class EclipseSingularsRecipes {
 		}
 		
 		// -- Utility methods --
+		
+		protected Annotation[] generateSelfReturnAnnotations(boolean deprecate, ASTNode source) {
+			Annotation deprecated = deprecate ? generateDeprecatedAnnotation(source) : null;
+			if (deprecated == null) return null;
+			return new Annotation[] {deprecated};
+		}
 		
 		/**
 		 * Adds the requested number of type arguments to the provided type, copying each argument in {@code typeArgs}. If typeArgs is too long, the extra elements are ignored.
@@ -301,22 +377,22 @@ public class EclipseSingularsRecipes {
 			}
 			
 			if (arguments.isEmpty()) return null;
-			return arguments.toArray(new TypeReference[arguments.size()]);
+			return arguments.toArray(new TypeReference[0]);
 		}
 		
 		private static final char[] SIZE_TEXT = new char[] {'s', 'i', 'z', 'e'};
 		
 		/** Generates 'this.<em>name</em>.size()' as an expression; if nullGuard is true, it's this.name == null ? 0 : this.name.size(). */
-		protected Expression getSize(EclipseNode builderType, char[] name, boolean nullGuard) {
+		protected Expression getSize(EclipseNode builderType, char[] name, boolean nullGuard, String builderVariable) {
 			MessageSend invoke = new MessageSend();
-			ThisReference thisRef = new ThisReference(0, 0);
+			Reference thisRef = getBuilderReference(builderVariable);
 			FieldReference thisDotName = new FieldReference(name, 0L);
 			thisDotName.receiver = thisRef;
 			invoke.receiver = thisDotName;
 			invoke.selector = SIZE_TEXT;
 			if (!nullGuard) return invoke;
 			
-			ThisReference cdnThisRef = new ThisReference(0, 0);
+			Reference cdnThisRef = getBuilderReference(builderVariable);
 			FieldReference cdnThisDotName = new FieldReference(name, 0L);
 			cdnThisDotName.receiver = cdnThisRef;
 			NullLiteral nullLiteral = new NullLiteral(0, 0);
@@ -344,6 +420,46 @@ public class EclipseSingularsRecipes {
 			}
 			
 			return new QualifiedTypeReference(TypeConstants.JAVA_LANG_OBJECT, NULL_POSS);
+		}
+		
+		/** @return a {@code SingleNameReference} to the builder in the variable <code>builderVariable</code>. If {@ code builderVariable == "this"}, a {@code ThisReference} is returned. */
+		protected static Reference getBuilderReference(String builderVariable) {
+			if ("this".equals(builderVariable)) {
+				return new ThisReference(0, 0);
+			} else {
+				return new SingleNameReference(builderVariable.toCharArray(), 0);
+			}
+		}
+		
+		protected void nullBehaviorize(EclipseNode typeNode, SingularData data, List<Statement> statements, Argument arg, MethodDeclaration md) {
+			boolean ignoreNullCollections = data.isIgnoreNullCollections();
+			
+			if (ignoreNullCollections) {
+				Expression isNotNull = new EqualExpression(new SingleNameReference(data.getPluralName(), 0L), new NullLiteral(0, 0), OperatorIds.NOT_EQUAL);
+				Block b = new Block(0);
+				b.statements = statements.toArray(new Statement[statements.size()]);
+				statements.clear();
+				statements.add(new IfStatement(isNotNull, b, 0, 0));
+				EclipseHandlerUtil.createRelevantNullableAnnotation(typeNode, arg, md);
+				return;
+			}
+			
+			EclipseHandlerUtil.createRelevantNonNullAnnotation(typeNode, arg, md);
+			Statement nullCheck = EclipseHandlerUtil.generateNullCheck(null, data.getPluralName(), typeNode, "%s cannot be null");
+			statements.add(0, nullCheck);
+		}
+		
+		protected abstract int getTypeArgumentsCount();
+		
+		protected abstract char[][] getEmptyMakerReceiver(String targetFqn);
+		protected abstract char[] getEmptyMakerSelector(String targetFqn);
+		
+		public MessageSend getEmptyExpression(String targetFqn, SingularData data, EclipseNode typeNode, ASTNode source) {
+			MessageSend send = new MessageSend();
+			send.receiver = generateQualifiedNameRef(source, getEmptyMakerReceiver(targetFqn));
+			send.selector = getEmptyMakerSelector(targetFqn);
+			send.typeArguments = createTypeArgs(getTypeArgumentsCount(), false, typeNode, data.getTypeArgs());
+			return send;
 		}
 	}
 }

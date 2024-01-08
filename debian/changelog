@@ -1,3 +1,45 @@
+lombok (1.18.24-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - Refreshed the patches
+    - Depend on ivyplusplus (>= 1.40)
+    - No longer depend on libspi-java
+    - Updated the Maven poms
+  * Fixed the build failure with Java 17 (Closes: #981984)
+
+ -- Emmanuel Bourg <ebourg@apache.org>  Thu, 12 May 2022 14:26:36 +0200
+
+lombok (1.18.18-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - Refreshed the patches
+    - Depend on liblombok-patcher-java (>= 0.42)
+    - No longer install lombok-utils.jar
+  * Build with ivy-debian-helper
+  * Filter out the Windows binaries from the upstream tarball
+
+ -- Emmanuel Bourg <ebourg@apache.org>  Wed, 11 May 2022 11:35:18 +0200
+
+lombok (1.18.12-2) unstable; urgency=medium
+
+  * Team upload.
+  * Fixed the build failure (Closes: #1006023)
+
+ -- Emmanuel Bourg <ebourg@apache.org>  Tue, 10 May 2022 14:30:08 +0200
+
+lombok (1.18.12-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - Refreshed the patches
+    - Updated the Maven poms
+  * Standards-Version updated to 4.6.0.1
+  * Switch to debhelper level 13
+
+ -- Emmanuel Bourg <ebourg@apache.org>  Tue, 15 Feb 2022 01:17:50 +0100
+
 lombok (1.16.22-7) unstable; urgency=medium
 
   * Team upload.

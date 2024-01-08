@@ -1,3 +1,5 @@
+// version 8: In java6/7, lub types worked differently, so, the `arraysAsList` method has a slightly different inferred type there.
+import java.math.BigDecimal;
 import java.util.*;
 public class ValWeirdTypes<Z> {
 	private List<Z> fieldList;
@@ -36,6 +38,7 @@ public class ValWeirdTypes<Z> {
 		final java.util.List<? super java.lang.Number> d = upper;
 		List<?> unbound = lower;
 		final java.util.List<?> e = unbound;
+		final java.lang.Object f = unbound.get(0);
 	}
 	public void testCompound() {
 		final java.util.ArrayList<java.lang.String> a = new ArrayList<String>();
@@ -53,5 +56,16 @@ public class ValWeirdTypes<Z> {
 		final int[] copy = intArray;
 		final java.lang.Object[] single = multiDimArray[0];
 		final int singleInt = copy[0];
+	}
+	public void arraysAsList() {
+		final java.util.List<java.lang.Class<? extends java.io.Serializable>> x = Arrays.asList(String.class, BigDecimal.class);
+		for (final java.lang.Class<? extends java.io.Serializable> y : x) {
+		}
+	}
+	@SuppressWarnings("all")
+	public void arraysAsList2() {
+		final java.util.List<java.lang.Class<? extends java.lang.Comparable>> x = Arrays.asList(String.class, BigDecimal.class, Comparable.class);
+		for (final java.lang.Class<? extends java.lang.Comparable> y : x) {
+		}
 	}
 }

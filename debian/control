@@ -9,20 +9,19 @@ Build-Depends:
  ant,
  ant-optional,
  cmdreader,
- debhelper (>= 11),
+ debhelper-compat (= 13),
  default-jdk,
- ivyplusplus (>= 1.28-3~),
- javahelper,
+ ivy-debian-helper,
+ ivyplusplus (>= 1.40),
  libasm-java,
  libeclipse-jdt-core-manipulation-java,
  libeclipse-jdt-ui-java,
  libeclipse-jface-text-java,
  libjna-java,
- liblombok-patcher-java,
+ liblombok-patcher-java (>= 0.42-3~),
  libosgi-core-java,
- libspi-java,
  maven-repo-helper
-Standards-Version: 4.3.0
+Standards-Version: 4.6.0.1
 Vcs-Git: https://salsa.debian.org/java-team/lombok.git
 Vcs-Browser: https://salsa.debian.org/java-team/lombok
 Homepage: https://projectlombok.org

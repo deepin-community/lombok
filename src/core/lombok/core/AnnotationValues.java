@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 The Project Lombok Authors.
+ * Copyright (C) 2009-2022 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 import lombok.core.AST.Kind;
+import lombok.permit.Permit;
 
 /**
  * Represents a single annotation in a source file and can be used to query the parameters present on it.
@@ -164,7 +165,7 @@ public class AnnotationValues<A extends Annotation> {
 		AnnotationValue v = values.get(methodName);
 		
 		if (v == null) {
-			String[] s = getDefaultIf(methodName, String[].class, new String[0]);
+			String[] s = getDefaultIf(methodName, new String[0]);
 			return Collections.unmodifiableList(Arrays.asList(s));
 		}
 		
@@ -174,7 +175,7 @@ public class AnnotationValues<A extends Annotation> {
 			Object result = guess == null ? null : guessToType(guess, String.class, v, idx);
 			if (result == null) {
 				if (v.valueGuesses.size() == 1) {
-					String[] s = getDefaultIf(methodName, String[].class, new String[0]);
+					String[] s = getDefaultIf(methodName, new String[0]);
 					return Collections.unmodifiableList(Arrays.asList(s));
 				} 
 				throw new AnnotationValueDecodeFail(v, 
@@ -189,28 +190,29 @@ public class AnnotationValues<A extends Annotation> {
 	public String getAsString(String methodName) {
 		AnnotationValue v = values.get(methodName);
 		if (v == null || v.valueGuesses.size() != 1) {
-			return getDefaultIf(methodName, String.class, "");
+			return getDefaultIf(methodName, "");
 		}
 		
 		Object guess = guessToType(v.valueGuesses.get(0), String.class, v, 0);
 		if (guess instanceof String) return (String) guess;
-		return getDefaultIf(methodName, String.class, "");
+		return getDefaultIf(methodName, "");
 	}
 	
 	public boolean getAsBoolean(String methodName) {
 		AnnotationValue v = values.get(methodName);
 		if (v == null || v.valueGuesses.size() != 1) {
-			return getDefaultIf(methodName, Boolean.class, false);
+			return getDefaultIf(methodName, false);
 		}
 		
-		Object guess = guessToType(v.valueGuesses.get(0), Boolean.class, v, 0);
+		Object guess = guessToType(v.valueGuesses.get(0), boolean.class, v, 0);
 		if (guess instanceof Boolean) return ((Boolean) guess).booleanValue();
-		return getDefaultIf(methodName, Boolean.class, false);
+		return getDefaultIf(methodName, false);
 	}
 	
-	public <T> T getDefaultIf(String methodName, Class<T> type, T defaultValue) {
+	@SuppressWarnings("unchecked")
+	public <T> T getDefaultIf(String methodName, T defaultValue) {
 		try {
-			return type.cast(type.getMethod(methodName).getDefaultValue());
+			return (T) Permit.getMethod(type, methodName).getDefaultValue();
 		} catch (Exception e) {
 			return defaultValue;
 		}
@@ -286,19 +288,19 @@ public class AnnotationValues<A extends Annotation> {
 	}
 	
 	private Object guessToType(Object guess, Class<?> expected, AnnotationValue v, int pos) {
-		if (expected == int.class) {
+		if (expected == int.class || expected == Integer.class) {
 			if (guess instanceof Integer || guess instanceof Short || guess instanceof Byte) {
 				return ((Number) guess).intValue();
 			}
 		}
 		
-		if (expected == long.class) {
+		if (expected == long.class || expected == Long.class) {
 			if (guess instanceof Long || guess instanceof Integer || guess instanceof Short || guess instanceof Byte) {
 				return ((Number) guess).longValue();
 			}
 		}
 		
-		if (expected == short.class) {
+		if (expected == short.class || expected == Short.class) {
 			if (guess instanceof Integer || guess instanceof Short || guess instanceof Byte) {
 				int intVal = ((Number) guess).intValue();
 				int shortVal = ((Number) guess).shortValue();
@@ -306,7 +308,7 @@ public class AnnotationValues<A extends Annotation> {
 			}
 		}
 		
-		if (expected == byte.class) {
+		if (expected == byte.class || expected == Byte.class) {
 			if (guess instanceof Integer || guess instanceof Short || guess instanceof Byte) {
 				int intVal = ((Number) guess).intValue();
 				int byteVal = ((Number) guess).byteValue();
@@ -314,19 +316,19 @@ public class AnnotationValues<A extends Annotation> {
 			}
 		}
 		
-		if (expected == double.class) {
+		if (expected == double.class || expected == Double.class) {
 			if (guess instanceof Number) return ((Number) guess).doubleValue();
 		}
 		
-		if (expected == float.class) {
+		if (expected == float.class || expected == Float.class) {
 			if (guess instanceof Number) return ((Number) guess).floatValue();
 		}
 		
-		if (expected == boolean.class) {
+		if (expected == boolean.class || expected == Boolean.class) {
 			if (guess instanceof Boolean) return ((Boolean) guess).booleanValue();
 		}
 		
-		if (expected == char.class) {
+		if (expected == char.class || expected == Character.class) {
 			if (guess instanceof Character) return ((Character) guess).charValue();
 		}
 		
@@ -346,7 +348,7 @@ public class AnnotationValues<A extends Annotation> {
 			}
 		}
 		
-		if (Class.class == expected) {
+		if (expected == Class.class) {
 			if (guess instanceof ClassLiteral) try {
 				String classLit = ((ClassLiteral) guess).getClassName();
 				return Class.forName(toFQ(classLit));
@@ -409,6 +411,14 @@ public class AnnotationValues<A extends Annotation> {
 	public Object getActualExpression(String annotationMethodName) {
 		List<Object> l = getActualExpressions(annotationMethodName);
 		return l.isEmpty() ? null : l.get(0);
+	}
+
+	/**
+	 * Returns the guessed value for the provided {@code annotationMethodName}.
+	 */
+	public Object getValueGuess(String annotationMethodName) {
+		AnnotationValue v = values.get(annotationMethodName);
+		return v == null || v.valueGuesses.isEmpty() ? null : v.valueGuesses.get(0);
 	}
 	
 	/** Generates an error message on the stated annotation value (you should only call this method if you know it's there!) */
@@ -539,5 +549,26 @@ public class AnnotationValues<A extends Annotation> {
 		if (result.length() > 0) result.append('.');
 		result.append(typeName);
 		return result.toString();
+	}
+	
+	/**
+	 * Creates an amalgamation where any values in this AnnotationValues that aren't explicit are 'enriched' by explicitly set stuff from {@code defaults}.
+	 * Note that this code may modify self and then returns self, or it returns defaults - do not rely on immutability nor on getting self.
+	 */
+	public AnnotationValues<A> integrate(AnnotationValues<A> defaults) {
+		if (values.isEmpty()) return defaults;
+		for (Map.Entry<String, AnnotationValue> entry : defaults.values.entrySet()) {
+			if (!entry.getValue().isExplicit) continue;
+			AnnotationValue existingValue = values.get(entry.getKey());
+			if (existingValue != null && existingValue.isExplicit) continue;
+			values.put(entry.getKey(), entry.getValue());
+		}
+		return this;
+	}
+	
+	/** Returns {@code true} if the annotation has zero parameters. */
+	public boolean isMarking() {
+		for (AnnotationValue v : values.values()) if (v.isExplicit) return false;
+		return true;
 	}
 }

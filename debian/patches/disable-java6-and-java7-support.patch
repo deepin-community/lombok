@@ -1,20 +1,9 @@
 Description: Disables support for Java 6 and 7
 Author: Emmanuel Bourg <ebourg@apache.org>
 Forwarded: not-needed
---- a/build.xml
-+++ b/build.xml
-@@ -218,6 +218,8 @@
- 			<compilerarg value="-Xlint:-options" />
- 			<src path="src/utils" />
- 			<include name="lombok/javac/**" />
-+			<exclude name="lombok/javac/**/java6/**" />
-+			<exclude name="lombok/javac/**/java7/**" />
- 			<classpath location="build/lombok-utils" />
- 			<classpath refid="build.path" />
- 		</ivy:compile>
 --- a/src/utils/lombok/javac/Javac.java
 +++ b/src/utils/lombok/javac/Javac.java
-@@ -332,7 +332,7 @@
+@@ -432,7 +432,7 @@
  		} catch (IllegalAccessException ignore) {}
  		
  		if (Javac.getJavaCompilerVersion() < 8) {
@@ -23,7 +12,7 @@ Forwarded: not-needed
  		} else {
  			try {
  				if (CTC_VOID.equals(tag)) {
-@@ -348,24 +348,6 @@
+@@ -452,24 +452,6 @@
  		}
  	}
  	

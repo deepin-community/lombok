@@ -1,0 +1,46 @@
+Description: Turn the SpiProcessor errors into warnings
+Author: Emmanuel Bourg <ebourg@apache.org>
+Forwarded: no
+
+--- a/src/spiProcessor/lombok/spi/SpiProcessor.java
++++ b/src/spiProcessor/lombok/spi/SpiProcessor.java
+@@ -217,7 +217,7 @@
+ 			}
+ 			if (!needed.isEmpty()) {
+ 				report(elem, "is marked as providing " + needed + " but does not implement it");
+-				return;
++				System.out.println("WARNING: " + elem + " is marked as providing " + needed + " but does not implement it");
+ 			}
+ 		}
+ 		
+@@ -244,8 +244,8 @@
+ 	
+ 	private void report(Element elem, String message) {
+ 		/* In eclipse, messages just seem to get ignored, so we throw instead. */
+-		if (Boolean.TRUE) throw new RuntimeException(elem.getSimpleName() + " " + message);
+-		processingEnv.getMessager().printMessage(Kind.ERROR, elem.getSimpleName() + " " + message, elem);
++		//if (Boolean.TRUE) throw new RuntimeException(elem + " " + elem.getSimpleName() + " " + message);
++		processingEnv.getMessager().printMessage(Kind.WARNING, elem.getSimpleName() + " " + message, elem);
+ 	}
+ 	
+ 	private String createProperQualifiedName(TypeElement provider) {
+--- a/src/spiProcessor/lombok/spi/SpiProcessorPersistence.java
++++ b/src/spiProcessor/lombok/spi/SpiProcessorPersistence.java
+@@ -70,7 +70,7 @@
+ 				return null;
+ 			}
+ 			
+-			logger.printMessage(Kind.ERROR, SpiProcessor.toErrorMsg(e, pathName));
++			logger.printMessage(Kind.WARNING, SpiProcessor.toErrorMsg(e, pathName));
+ 			return null;
+ 		} catch (Exception other) {
+ 			// otherwise, probably javac: Some versions don't support the `openReader` method.
+@@ -79,7 +79,7 @@
+ 			} catch (FileNotFoundException e) {
+ 				return null;
+ 			} catch (IOException e) {
+-				logger.printMessage(Kind.ERROR, SpiProcessor.toErrorMsg(e, pathName));
++				logger.printMessage(Kind.WARNING, SpiProcessor.toErrorMsg(e, pathName));
+ 				return null;
+ 			}
+ 		}

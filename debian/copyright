@@ -3,7 +3,7 @@ Upstream-Name: lombok
 Source: https://github.com/rzwitserloot/lombok
 Files-Excluded:
  lombok*/website/*
- *.dll
+ *.binary
 
 Files: *
 Copyright: 2009-2015 The Project Lombok Authors.

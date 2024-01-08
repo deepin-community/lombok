@@ -1,3 +1,4 @@
+//version 8:
 import java.lang.annotation.*;
 class NonNullPlain {
 	@lombok.NonNull
@@ -13,7 +14,7 @@ class NonNullPlain {
 	@java.lang.SuppressWarnings("all")
 	public NonNullPlain(@lombok.NonNull final int i, @lombok.NonNull final String s) {
 		if (s == null) {
-			throw new java.lang.NullPointerException("s");
+			throw new java.lang.NullPointerException("s is marked non-null but is null");
 		}
 		this.i = i;
 		this.s = s;
@@ -39,7 +40,7 @@ class NonNullPlain {
 	@java.lang.SuppressWarnings("all")
 	public void setS(@lombok.NonNull final String s) {
 		if (s == null) {
-			throw new java.lang.NullPointerException("s");
+			throw new java.lang.NullPointerException("s is marked non-null but is null");
 		}
 		this.s = s;
 	}

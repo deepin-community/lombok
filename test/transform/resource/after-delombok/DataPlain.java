@@ -6,10 +6,6 @@ class Data1 {
 		this.x = x;
 	}
 	@java.lang.SuppressWarnings("all")
-	private Data1() {
-		this.x = 0;
-	}
-	@java.lang.SuppressWarnings("all")
 	public int getX() {
 		return this.x;
 	}
@@ -60,10 +56,6 @@ class Data2 {
 	@java.lang.SuppressWarnings("all")
 	public Data2(final int x) {
 		this.x = x;
-	}
-	@java.lang.SuppressWarnings("all")
-	private Data2() {
-		this.x = 0;
 	}
 	@java.lang.SuppressWarnings("all")
 	public int getX() {
@@ -118,10 +110,6 @@ final class Data3 {
 		this.x = x;
 	}
 	@java.lang.SuppressWarnings("all")
-	private Data3() {
-		this.x = 0;
-	}
-	@java.lang.SuppressWarnings("all")
 	public int getX() {
 		return this.x;
 	}
@@ -164,6 +152,7 @@ final class Data3 {
 final class Data4 extends java.util.Timer {
 	int x;
 	Data4() {
+		super();
 	}
 	@java.lang.SuppressWarnings("all")
 	public int getX() {
@@ -222,7 +211,7 @@ class Data5 {
 	@java.lang.Override
 	@java.lang.SuppressWarnings("all")
 	public int hashCode() {
-		int result = 1;
+		final int result = 1;
 		return result;
 	}
 	@java.lang.Override
@@ -245,7 +234,7 @@ final class Data6 {
 	@java.lang.Override
 	@java.lang.SuppressWarnings("all")
 	public int hashCode() {
-		int result = 1;
+		final int result = 1;
 		return result;
 	}
 	@java.lang.Override
