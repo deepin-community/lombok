@@ -1,0 +1,14 @@
+Description: Do not generate the changelog
+Author: Markus Koschany <apo@debian.org>
+Forwarded: not-needed
+--- a/buildScripts/compile.ant.xml
++++ b/buildScripts/compile.ant.xml
+@@ -242,7 +242,7 @@
+ 		</ivy:cachedunjar>
+ 	</target>
+ 	
+-	<target name="dist" depends="version, compile, latest-changes.build, mapstruct.compile, -deps.unpack" description="Builds the 'everything' lombok.jar">
++	<target name="dist" depends="version, compile, mapstruct.compile, -deps.unpack" description="Builds the 'everything' lombok.jar">
+ 		<mkdir dir="dist" />
+ 		<copy file="doc/changelog.markdown" tofile="build/changelog.txt" />
+ 		<tstamp><format property="release.timestamp" pattern="yyyy-MM-dd" /></tstamp>

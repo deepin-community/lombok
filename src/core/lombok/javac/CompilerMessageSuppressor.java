@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2013 The Project Lombok Authors.
+ * Copyright (C) 2011-2021 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,8 @@ import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.JCDiagnostic;
 import com.sun.tools.javac.util.ListBuffer;
 import com.sun.tools.javac.util.Log;
+
+import lombok.permit.Permit;
 
 /**
  * During resolution, the resolver will emit resolution errors, but without appropriate file names and line numbers. If these resolution errors stick around
@@ -89,11 +91,8 @@ public final class CompilerMessageSuppressor {
 	
 	static Field getDeclaredField(Class<?> c, String fieldName) {
 		try {
-			Field field = c.getDeclaredField(fieldName);
-			field.setAccessible(true);
-			return field;
-		}
-		catch (Throwable t) {
+			return Permit.getField(c, fieldName);
+		} catch (Throwable t) {
 			return null;
 		}
 	}
@@ -227,7 +226,7 @@ public final class CompilerMessageSuppressor {
 			ListBuffer<Object> newDeferredDiagnostics = new ListBuffer<Object>();
 			for (Object diag_ : deferredDiagnostics) {
 				if (!(diag_ instanceof JCDiagnostic)) {
-					newDeferredDiagnostics.add(diag_);
+					newDeferredDiagnostics.append(diag_);
 					continue;
 				}
 				JCDiagnostic diag = (JCDiagnostic) diag_;
@@ -235,7 +234,7 @@ public final class CompilerMessageSuppressor {
 				if (here >= startPos && here < endPos && diag.getSource() == sourcefile) {
 					// We eliminate it
 				} else {
-					newDeferredDiagnostics.add(diag);
+					newDeferredDiagnostics.append(diag);
 				}
 			}
 			field.set(receiver, newDeferredDiagnostics);

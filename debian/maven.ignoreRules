@@ -1,0 +1,20 @@
+
+com.google.code.findbugs findbugs
+com.google.flogger flogger
+com.google.guava guava
+com.hierynomus sshj
+com.fasterxml.jackson.core *
+com.sparkjava spark-core
+commons-logging commons-logging
+de.java2html java2html
+junit junit
+net.java.openjdk.custom *
+org.apache.logging.log4j log4j-api
+org.freemarker freemarker
+org.jboss.logging jboss-logging
+org.mapstruct mapstruct-processor
+org.slf4j slf4j-api
+org.slf4j slf4j-ext
+org.springframework spring-core
+projectlombok.org markdownj
+log4j log4j

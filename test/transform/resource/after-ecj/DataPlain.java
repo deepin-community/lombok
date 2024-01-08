@@ -45,10 +45,6 @@ import lombok.Data;
     super();
     this.x = x;
   }
-  private @java.lang.SuppressWarnings("all") Data1() {
-    super();
-    this.x = 0;
-  }
 }
 @Data class Data2 {
   final int x;
@@ -96,10 +92,6 @@ import lombok.Data;
     super();
     this.x = x;
   }
-  private @java.lang.SuppressWarnings("all") Data2() {
-    super();
-    this.x = 0;
-  }
 }
 final @Data class Data3 {
   final int x;
@@ -141,10 +133,6 @@ final @Data class Data3 {
   public @java.lang.SuppressWarnings("all") Data3(final int x) {
     super();
     this.x = x;
-  }
-  private @java.lang.SuppressWarnings("all") Data3() {
-    super();
-    this.x = 0;
   }
 }
 final @Data @lombok.EqualsAndHashCode(callSuper = true) class Data4 extends java.util.Timer {
@@ -200,7 +188,7 @@ final @Data @lombok.EqualsAndHashCode(callSuper = true) class Data4 extends java
     return (other instanceof Data5);
   }
   public @java.lang.Override @java.lang.SuppressWarnings("all") int hashCode() {
-    int result = 1;
+    final int result = 1;
     return result;
   }
   public @java.lang.Override @java.lang.SuppressWarnings("all") java.lang.String toString() {
@@ -219,7 +207,7 @@ final @Data class Data6 {
     return true;
   }
   public @java.lang.Override @java.lang.SuppressWarnings("all") int hashCode() {
-    int result = 1;
+    final int result = 1;
     return result;
   }
   public @java.lang.Override @java.lang.SuppressWarnings("all") java.lang.String toString() {

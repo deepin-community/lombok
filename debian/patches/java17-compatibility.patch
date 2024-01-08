@@ -1,0 +1,60 @@
+Description: Fixes the compatibility with Java 17
+Author: Emmanuel Bourg <ebourg@apache.org>
+Forwarded: no
+--- a/src/delombok/lombok/delombok/PrettyPrinter.java
++++ b/src/delombok/lombok/delombok/PrettyPrinter.java
+@@ -23,6 +23,7 @@
+ 
+ import static com.sun.tools.javac.code.Flags.*;
+ import static lombok.javac.Javac.*;
++import lombok.javac.Javac;
+ import static lombok.javac.JavacTreeMaker.TreeTag.treeTag;
+ import static lombok.javac.JavacTreeMaker.TypeTag.typeTag;
+ 
+@@ -514,7 +515,7 @@
+ 		boolean isInterface = (tree.mods.flags & INTERFACE) != 0;
+ 		boolean isAnnotationInterface = isInterface && (tree.mods.flags & ANNOTATION) != 0;
+ 		boolean isEnum = (tree.mods.flags & ENUM) != 0;
+-		boolean isRecord = (tree.mods.flags & RECORD) != 0;
++		boolean isRecord = (tree.mods.flags & Javac.RECORD) != 0;
+ 		
+ 		if (isAnnotationInterface) print("@interface ");
+ 		else if (isInterface) print("interface ");
+@@ -566,7 +567,7 @@
+ 		for (JCTree member : members) {
+ 			if (member instanceof JCVariableDecl) {
+ 			JCVariableDecl variableDecl = (JCVariableDecl) member;
+-				if ((variableDecl.mods.flags & GENERATED_MEMBER) != 0) {
++				if ((variableDecl.mods.flags & Javac.GENERATED_MEMBER) != 0) {
+ 					if (!first) print(", ");
+ 					first = false;
+ 					printAnnotations(variableDecl.mods.annotations, false);
+@@ -606,7 +607,7 @@
+ 				JCTree init = ((JCVariableDecl) member).init;
+ 				typeOfPrevEnumMember = init instanceof JCNewClass && ((JCNewClass) init).def != null ? 2 : 1;
+ 			} else if (member instanceof JCVariableDecl) {
+-				if ((((JCVariableDecl) member).mods.flags & GENERATED_MEMBER) != 0) continue;
++				if ((((JCVariableDecl) member).mods.flags & Javac.GENERATED_MEMBER) != 0) continue;
+ 				if (prefType != null && prefType != JCVariableDecl.class) println();
+ 				if (isInterface) flagMod = -1L & ~(PUBLIC | STATIC | FINAL);
+ 				print(member);
+@@ -820,7 +821,7 @@
+ 		}
+ 		
+ 		boolean argsLessConstructor = false;
+-		if (isConstructor && (tree.mods.flags & COMPACT_RECORD_CONSTRUCTOR) != 0) {
++		if (isConstructor && (tree.mods.flags & Javac.COMPACT_RECORD_CONSTRUCTOR) != 0) {
+ 			argsLessConstructor = true;
+ 		}
+ 		
+@@ -1022,8 +1023,8 @@
+ 		if ((v & TRANSIENT) != 0) print("transient ");
+ 		if ((v & NATIVE) != 0) print("native ");
+ 		if ((v & ABSTRACT) != 0) print("abstract ");
+-		if ((v & SEALED) != 0) print("sealed ");
+-		if ((v & NON_SEALED) != 0) print("non-sealed ");
++		if ((v & Javac.SEALED) != 0) print("sealed ");
++		if ((v & Javac.NON_SEALED) != 0) print("non-sealed ");
+ 		if ((v & STRICTFP) != 0) print("strictfp ");
+ 		if ((v & DEFAULT) != 0 && (v & INTERFACE) == 0) print("default ");
+ 	}

@@ -1,3 +1,4 @@
+//version 8:
 class DataOnLocalClass1 {
 	public static void main(String[] args) {
 		class Local {
@@ -6,10 +7,6 @@ class DataOnLocalClass1 {
 			@java.lang.SuppressWarnings("all")
 			public Local(final int x) {
 				this.x = x;
-			}
-			@java.lang.SuppressWarnings("all")
-			private Local() {
-				this.x = 0;
 			}
 			@java.lang.SuppressWarnings("all")
 			public int getX() {
@@ -68,12 +65,9 @@ class DataOnLocalClass2 {
 				@java.lang.SuppressWarnings("all")
 				public InnerLocal(@lombok.NonNull final String name) {
 					if (name == null) {
-						throw new java.lang.NullPointerException("name");
+						throw new java.lang.NullPointerException("name is marked non-null but is null");
 					}
 					this.name = name;
-				}
-				@java.lang.SuppressWarnings("all")
-				private InnerLocal() {
 				}
 				@lombok.NonNull
 				@java.lang.SuppressWarnings("all")
@@ -83,7 +77,7 @@ class DataOnLocalClass2 {
 				@java.lang.SuppressWarnings("all")
 				public void setName(@lombok.NonNull final String name) {
 					if (name == null) {
-						throw new java.lang.NullPointerException("name");
+						throw new java.lang.NullPointerException("name is marked non-null but is null");
 					}
 					this.name = name;
 				}
@@ -121,10 +115,6 @@ class DataOnLocalClass2 {
 			@java.lang.SuppressWarnings("all")
 			public Local(final int x) {
 				this.x = x;
-			}
-			@java.lang.SuppressWarnings("all")
-			private Local() {
-				this.x = 0;
 			}
 			@java.lang.SuppressWarnings("all")
 			public int getX() {

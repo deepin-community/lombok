@@ -9,7 +9,7 @@ Author: Emmanuel Bourg <ebourg@apache.org>
 Forwarded: no
 --- a/src/utils/lombok/javac/PackageName.java
 +++ b/src/utils/lombok/javac/PackageName.java
-@@ -30,15 +30,6 @@
+@@ -32,15 +32,6 @@
  
  // Supports JDK6-9
  public class PackageName {
@@ -17,7 +17,7 @@ Forwarded: no
 -	
 -	private static Method getPackageNameMethod() {
 -		try {
--			return JCCompilationUnit.class.getDeclaredMethod("getPackageName");
+-			return Permit.getMethod(JCCompilationUnit.class, "getPackageName");
 -		} catch (Exception e) {
 -			return null;
 -		}
@@ -25,7 +25,7 @@ Forwarded: no
  	
  	public static String getPackageName(JCCompilationUnit cu) {
  		JCTree t = getPackageNode(cu);
-@@ -46,10 +37,7 @@
+@@ -48,10 +39,7 @@
  	}
  	
  	public static JCTree getPackageNode(JCCompilationUnit cu) {
@@ -40,7 +40,7 @@ Forwarded: no
  }
 --- a/src/core/lombok/javac/JavacAST.java
 +++ b/src/core/lombok/javac/JavacAST.java
-@@ -530,13 +530,16 @@
+@@ -680,13 +680,16 @@
  		}
  
  		@Override void error1(DiagnosticPosition pos, String message) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009-2013 The Project Lombok Authors.
+ * Copyright (C) 2009-2021 The Project Lombok Authors.
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,13 +29,17 @@ import java.util.regex.Pattern;
 
 import lombok.core.ClassLiteral;
 import lombok.core.FieldSelect;
+import lombok.core.JavaIdentifiers;
+import lombok.permit.Permit;
+
 import org.eclipse.jdt.internal.compiler.ast.ASTNode;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.AbstractVariableDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.Annotation;
+import org.eclipse.jdt.internal.compiler.ast.CaseStatement;
 import org.eclipse.jdt.internal.compiler.ast.ClassLiteralAccess;
 import org.eclipse.jdt.internal.compiler.ast.Clinit;
 import org.eclipse.jdt.internal.compiler.ast.Expression;
-import org.eclipse.jdt.internal.compiler.ast.FieldDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.Literal;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedNameReference;
 import org.eclipse.jdt.internal.compiler.ast.SingleNameReference;
@@ -56,6 +60,16 @@ public class Eclipse {
 	 */
 	public static final int ECLIPSE_DO_NOT_TOUCH_FLAG = ASTNode.Bit24;
 	
+	/* This section includes flags that are in ecj files too new vs. the deps we compile against.
+	 * Specifically: org.eclipse.jdt.internal.compiler.ast.ASTNode and org.eclipse.jdt.internal.compiler.lookup.ExtraCompilerModifiers
+	 */
+	public static final int AccRecord = ASTNode.Bit25; // ECM.AccRecord
+	public static final int IsCanonicalConstructor = ASTNode.Bit10; // ASTNode.IsCanonicalConstructor
+	public static final int IsImplicit = ASTNode.Bit11; // ASTNode.IsImplicit
+	public static final int HasTypeAnnotations = ASTNode.Bit21; // ASTNode.HasTypeAnnotations
+	
+	private static final Pattern SPLIT_AT_DOT = Pattern.compile("\\.");
+	
 	private Eclipse() {
 		//Prevent instantiation
 	}
@@ -65,19 +79,25 @@ public class Eclipse {
 	 * but we need to deal with it. This turns [[java][lang][String]] into "java.lang.String".
 	 */
 	public static String toQualifiedName(char[][] typeName) {
-		int len = typeName.length - 1;
+		int len = typeName.length - 1; // number of dots
+		if (len == 0) return new String(typeName[0]);
+		
 		for (char[] c : typeName) len += c.length;
-		StringBuilder sb = new StringBuilder(len);
-		boolean first = true;
-		for (char[] c : typeName) {
-			sb.append(first ? "" : ".").append(c);
-			first = false;
+		char[] ret = new char[len];
+		char[] part = typeName[0];
+		System.arraycopy(part, 0, ret, 0, part.length);
+		int pos = part.length;
+		for (int i = 1; i < typeName.length; i++) {
+			ret[pos++] = '.';
+			part = typeName[i];
+			System.arraycopy(part, 0, ret, pos, part.length);
+			pos += part.length;
 		}
-		return sb.toString();
+		return new String(ret);
 	}
 	
 	public static char[][] fromQualifiedName(String typeName) {
-		String[] split = typeName.split("\\.");
+		String[] split = SPLIT_AT_DOT.split(typeName);
 		char[][] result = new char[split.length][];
 		for (int i = 0; i < split.length; i++) {
 			result[i] = split[i].toCharArray();
@@ -131,7 +151,7 @@ public class Eclipse {
 	 * 
 	 * Only the simple name is checked - the package and any containing class are ignored.
 	 */
-	public static Annotation[] findAnnotations(FieldDeclaration field, Pattern namePattern) {
+	public static Annotation[] findAnnotations(AbstractVariableDeclaration field, Pattern namePattern) {
 		List<Annotation> result = new ArrayList<Annotation>();
 		if (field.annotations == null) return EMPTY_ANNOTATIONS_ARRAY;
 		for (Annotation annotation : field.annotations) {
@@ -147,16 +167,12 @@ public class Eclipse {
 		return result.toArray(EMPTY_ANNOTATIONS_ARRAY);
 	}
 	
-	/** Matches any of the 8 primitive names, such as {@code boolean}. */
-	private static final Pattern PRIMITIVE_TYPE_NAME_PATTERN = Pattern.compile(
-			"^(boolean|byte|short|int|long|float|double|char)$");
-	
 	/**
 	 * Checks if the given type reference represents a primitive type.
 	 */
 	public static boolean isPrimitive(TypeReference ref) {
 		if (ref.dimensions() > 0) return false;
-		return PRIMITIVE_TYPE_NAME_PATTERN.matcher(toQualifiedName(ref.getTypeName())).matches();
+		return JavaIdentifiers.isPrimitive(toQualifiedName(ref.getTypeName()));
 	}
 	
 	/**
@@ -178,11 +194,11 @@ public class Eclipse {
 			default: return null;
 			}
 		} else if (e instanceof ClassLiteralAccess) {
-			return new ClassLiteral(Eclipse.toQualifiedName(((ClassLiteralAccess)e).type.getTypeName()));
+			return new ClassLiteral(Eclipse.toQualifiedName(((ClassLiteralAccess) e).type.getTypeName()));
 		} else if (e instanceof SingleNameReference) {
 			return new FieldSelect(new String(((SingleNameReference)e).token));
 		} else if (e instanceof QualifiedNameReference) {
-			String qName = Eclipse.toQualifiedName(((QualifiedNameReference)e).tokens);
+			String qName = Eclipse.toQualifiedName(((QualifiedNameReference) e).tokens);
 			int idx = qName.lastIndexOf('.');
 			return new FieldSelect(idx == -1 ? qName : qName.substring(idx+1));
 		} else if (e instanceof UnaryExpression) {
@@ -209,8 +225,11 @@ public class Eclipse {
 		int highestVersionSoFar = 0;
 		for (Field f : ClassFileConstants.class.getDeclaredFields()) {
 			try {
-				if (f.getName().startsWith("JDK1_")) {
-					int thisVersion = Integer.parseInt(f.getName().substring("JDK1_".length()));
+				if (f.getName().startsWith("JDK")) {
+					String versionString = f.getName().substring("JDK".length());
+					if (versionString.startsWith("1_")) versionString = versionString.substring("1_".length());
+					
+					int thisVersion = Integer.parseInt(versionString);
 					if (thisVersion > highestVersionSoFar) {
 						highestVersionSoFar = thisVersion;
 						latestEcjCompilerVersionConstantCached = (Long) f.get(null);
@@ -231,9 +250,14 @@ public class Eclipse {
 		
 		for (Field f : CompilerOptions.class.getDeclaredFields()) {
 			try {
-				if (f.getName().startsWith("VERSION_1_")) {
-					ecjCompilerVersionCached = Math.max(ecjCompilerVersionCached, Integer.parseInt(f.getName().substring("VERSION_1_".length())));
-				}
+				String fName = f.getName();
+				String versionNumber = null;
+				if (fName.startsWith("VERSION_1_")) {
+					versionNumber = fName.substring("VERSION_1_".length());
+				} else if (fName.startsWith("VERSION_")) {
+					versionNumber = fName.substring("VERSION_".length());
+				} else continue;
+				ecjCompilerVersionCached = Math.max(ecjCompilerVersionCached, Integer.parseInt(versionNumber));
 			} catch (Exception ignore) {}
 		}
 		
@@ -253,5 +277,24 @@ public class Eclipse {
 		} catch (NoSuchFieldException e) {
 			return false;
 		}
+	}
+	
+	private static boolean caseStatementInit = false;
+	private static Field caseStatementConstantExpressions = null;
+	public static CaseStatement createCaseStatement(Expression expr) {
+		CaseStatement stat = new CaseStatement(expr, 0, 0);
+		if (expr == null) return stat;
+		if (!caseStatementInit) {
+			try {
+				caseStatementConstantExpressions = Permit.getField(CaseStatement.class, "constantExpressions");
+				caseStatementConstantExpressions.setAccessible(true);
+			} catch (NoSuchFieldException ignore) {}
+			caseStatementInit = true;
+		}
+		if (caseStatementConstantExpressions != null) try {
+			caseStatementConstantExpressions.set(stat, new Expression[] {expr});
+		} catch (IllegalArgumentException ignore) {
+		} catch (IllegalAccessException ignore) {}
+		return stat;
 	}
 }
